@@ -3,10 +3,10 @@
 CURDIR=$(shell pwd)
 CPUS=$$(($(shell cat /sys/devices/system/cpu/present | awk -F- '{ print $$2 }')+1))
 
-all: clean config kernel
+all: config kernel
 
 config:
-	$(Q)mkdir $(CURDIR)/build
+	$(Q)mkdir -p $(CURDIR)/build
 	$(Q)$(MAKE) -C $(CURDIR)/linux O=$(CURDIR)/build CROSS_COMPILE=arm-linux-gnueabihf- ARCH=arm caninos_labrador_defconfig
 	
 menuconfig:
