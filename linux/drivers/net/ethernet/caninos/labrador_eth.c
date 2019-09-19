@@ -43,10 +43,10 @@
 #include <linux/of_net.h>
 #include <linux/types.h>
 
-#include <linux/io.h>
-#include <mach/board.h>
-#include <mach/platform.h>
-#include <mach/hardware.h>
+// #include <linux/io.h>
+// #include <mach/board.h>
+// #include <mach/platform.h>
+// #include <mach/hardware.h>
 
 #define MODNAME "labrador-eth"
 #define DRV_VERSION "1.00"
@@ -1538,7 +1538,7 @@
 // }
 // #endif
 
-static int lpc_eth_drv_remove(struct platform_device *pdev)
+static int labrador_eth_drv_remove(struct platform_device *pdev)
 {
     INFO_MSG("REMOVE!");
 }
