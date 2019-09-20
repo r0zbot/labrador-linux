@@ -1,4 +1,14 @@
 /*
+
+
+
+
+
+
+INUTIL!!!!!!
+
+
+
  * drivers/net/ethernet/nxp/lpc_eth.c
  *
  * Author: Kevin Wells <kevin.wells@nxp.com>
@@ -1538,7 +1548,7 @@
 // }
 // #endif
 
-static int lpc_eth_drv_remove(struct platform_device *pdev)
+static int labrador_eth_drv_remove(struct platform_device *pdev)
 {
     INFO_MSG("REMOVE!");
 }
