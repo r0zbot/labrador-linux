@@ -95,6 +95,8 @@ static int labrador_eth_drv_probe(struct platform_device *pdev)
     int irq, ret;
     u32 tmp;
 
+    // testando compilacao auto
+
 //     /* Get platform resources */
 //     res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 //     irq = platform_get_irq(pdev, 0);
