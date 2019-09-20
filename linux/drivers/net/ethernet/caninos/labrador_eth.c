@@ -95,39 +95,39 @@ static int labrador_eth_drv_probe(struct platform_device *pdev)
     int irq, ret;
     u32 tmp;
 
-    /* Get platform resources */
-    res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-    irq = platform_get_irq(pdev, 0);
-    if (!res || irq < 0) {
-        dev_err(&pdev->dev, "error getting resources.\n");
-        ret = -ENXIO;
-        goto err_exit;
-    }
+//     /* Get platform resources */
+//     res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+//     irq = platform_get_irq(pdev, 0);
+//     if (!res || irq < 0) {
+//         dev_err(&pdev->dev, "error getting resources.\n");
+//         ret = -ENXIO;
+//         goto err_exit;
+//     }
 
 
-    return 0;
+//     return 0;
     
-err_out_unregister_netdev:
-    unregister_netdev(ndev);
-err_out_dma_unmap:
-    if (!use_iram_for_net(&pldat->pdev->dev) ||
-        pldat->dma_buff_size > lpc32xx_return_iram_size())
-        dma_free_coherent(&pldat->pdev->dev, pldat->dma_buff_size,
-                  pldat->dma_buff_base_v,
-                  pldat->dma_buff_base_p);
-err_out_free_irq:
-    free_irq(ndev->irq, ndev);
-err_out_iounmap:
-    iounmap(pldat->net_base);
-err_out_disable_clocks:
-    clk_disable_unprepare(pldat->clk);
-err_out_clk_put:
-    clk_put(pldat->clk);
-err_out_free_dev:
-    free_netdev(ndev);
-err_exit:
-    pr_err("%s: not found (%d).\n", MODNAME, ret);
-    return ret;
+// err_out_unregister_netdev:
+//     unregister_netdev(ndev);
+// err_out_dma_unmap:
+//     if (!use_iram_for_net(&pldat->pdev->dev) ||
+//         pldat->dma_buff_size > lpc32xx_return_iram_size())
+//         dma_free_coherent(&pldat->pdev->dev, pldat->dma_buff_size,
+//                   pldat->dma_buff_base_v,
+//                   pldat->dma_buff_base_p);
+// err_out_free_irq:
+//     free_irq(ndev->irq, ndev);
+// err_out_iounmap:
+//     iounmap(pldat->net_base);
+// err_out_disable_clocks:
+//     clk_disable_unprepare(pldat->clk);
+// err_out_clk_put:
+//     clk_put(pldat->clk);
+// err_out_free_dev:
+//     free_netdev(ndev);
+// err_exit:
+//     pr_err("%s: not found (%d).\n", MODNAME, ret);
+//     return ret;
 }
 
 #ifdef CONFIG_OF
