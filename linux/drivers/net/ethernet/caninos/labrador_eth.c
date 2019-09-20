@@ -59,7 +59,7 @@ struct netdata_local {
     spinlock_t      lock;
     void __iomem        *net_base;
     u32         msg_enable;
-    unsigned int        skblen[ENET_TX_DESC];
+    // unsigned int        skblen[ENET_TX_DESC];
     unsigned int        last_tx_idx;
     unsigned int        num_used_tx_buffs;
     struct mii_bus      *mii_bus;
