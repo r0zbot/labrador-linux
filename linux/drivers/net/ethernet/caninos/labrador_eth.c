@@ -46,6 +46,11 @@
 #define MODNAME "labrador-eth"
 #define DRV_VERSION "1.00"
 
+#define RX_RING_SIZE 64
+#define TX_RING_SIZE 128 
+#define ETH_PKG_MAX 1518
+
+
 
 #define INFO_MSG(fmt,...) pr_info(MODNAME ": " fmt, ##__VA_ARGS__)
 #define ERR_MSG(fmt,...) pr_err(MODNAME ": " fmt, ##__VA_ARGS__)
@@ -79,6 +84,18 @@ struct netdata_local {
     struct napi_struct  napi;
 };
 
+/*
+ * Structure of a TX/RX descriptors and RX status
+ */
+struct txrx_desc_t {
+    __le32 packet;
+    __le32 control;
+};
+struct rx_status_t {
+    __le32 statusinfo;
+    __le32 statushashcrc;
+};
+
 static int labrador_eth_drv_remove(struct platform_device *pdev)
 {
     INFO_MSG("labrador_eth_drv_remove!");
@@ -95,41 +112,94 @@ static int labrador_eth_drv_probe(struct platform_device *pdev)
     int irq, ret;
     u32 tmp;
 
-    // testando compilacao auto
 
-//     /* Get platform resources */
-//     res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-//     irq = platform_get_irq(pdev, 0);
-//     if (!res || irq < 0) {
-//         dev_err(&pdev->dev, "error getting resources.\n");
-//         ret = -ENXIO;
-//         goto err_exit;
-//     }
+    /* Get platform resources */
+    res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+    irq = platform_get_irq(pdev, 0);
+    if (!res || irq < 0) {
+        dev_err(&pdev->dev, "error getting resources.\n");
+        ret = -ENXIO;
+        goto err_exit;
+    }
 
+    /* Allocate net driver data structure */
+    ndev = alloc_etherdev(sizeof(struct netdata_local));
+    if (!ndev) {
+        dev_err(&pdev->dev, "could not allocate device.\n");
+        ret = -ENOMEM;
+        goto err_exit;
+    }
 
-//     return 0;
+    SET_NETDEV_DEV(ndev, &pdev->dev);
+
+    pldat = netdev_priv(ndev);
+    pldat->pdev = pdev;
+    pldat->ndev = ndev;
+
+    spin_lock_init(&pldat->lock);
+
+    /* Save resources */
+    ndev->irq = irq;
+
+    /* Get clock for the device */
+    pldat->clk = clk_get(&pdev->dev, NULL);
+    if (IS_ERR(pldat->clk)) {
+        dev_err(&pdev->dev, "error getting clock.\n");
+        ret = PTR_ERR(pldat->clk);
+        goto err_out_free_dev;
+    }
+
+    /* Enable network clock */
+    ret = clk_prepare_enable(pldat->clk);
+    if (ret)
+        goto err_out_clk_put;
+
+    /* Map IO space */
+    pldat->net_base = ioremap(res->start, resource_size(res));
+    if (!pldat->net_base) {
+        dev_err(&pdev->dev, "failed to map registers\n");
+        ret = -ENOMEM;
+        goto err_out_disable_clocks;
+    }
+    // ret = request_irq(ndev->irq, __labrador_eth_interrupt, 0, ndev->name, ndev);
+    if (ret) {
+        dev_err(&pdev->dev, "error requesting interrupt.\n");
+        goto err_out_iounmap;
+    }
+
+    // /* Setup driver functions */
+    // ndev->netdev_ops = &labrador_netdev_ops;
+    // ndev->ethtool_ops = &labrador_eth_ethtool_ops;
+    // ndev->watchdog_timeo = msecs_to_jiffies(2500);
+
+    /* Get size of DMA buffers/descriptors region */
+    pldat->dma_buff_size = (TX_RING_SIZE + RX_RING_SIZE) * (ETH_PKG_MAX +
+        sizeof(struct txrx_desc_t) + sizeof(struct rx_status_t));
+    pldat->dma_buff_base_v = 0;
+
+    return 0;
     
-// err_out_unregister_netdev:
-//     unregister_netdev(ndev);
+err_out_unregister_netdev:
+    unregister_netdev(ndev);
 // err_out_dma_unmap:
 //     if (!use_iram_for_net(&pldat->pdev->dev) ||
 //         pldat->dma_buff_size > lpc32xx_return_iram_size())
 //         dma_free_coherent(&pldat->pdev->dev, pldat->dma_buff_size,
 //                   pldat->dma_buff_base_v,
 //                   pldat->dma_buff_base_p);
-// err_out_free_irq:
-//     free_irq(ndev->irq, ndev);
-// err_out_iounmap:
-//     iounmap(pldat->net_base);
-// err_out_disable_clocks:
-//     clk_disable_unprepare(pldat->clk);
-// err_out_clk_put:
-//     clk_put(pldat->clk);
-// err_out_free_dev:
-//     free_netdev(ndev);
-// err_exit:
-//     pr_err("%s: not found (%d).\n", MODNAME, ret);
-//     return ret;
+err_out_free_irq:
+    free_irq(ndev->irq, ndev);
+err_out_iounmap:
+    iounmap(pldat->net_base);
+err_out_disable_clocks:
+    clk_disable_unprepare(pldat->clk);
+err_out_clk_put:
+    clk_put(pldat->clk);
+err_out_free_dev:
+    free_netdev(ndev);
+err_exit:
+    pr_err("%s: not found (%d).\n", MODNAME, ret);
+    return ret;
 }
 
 #ifdef CONFIG_OF
