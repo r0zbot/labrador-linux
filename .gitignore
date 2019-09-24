@@ -3,4 +3,7 @@ output/
 *.ko
 *.bin
 .kdev4/
-*.kdev4
+*.kdev
+xt*
+ipt*
+ip6t*

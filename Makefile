@@ -23,5 +23,8 @@ kernel:
 	$(Q)cp $(CURDIR)/build/arch/arm/boot/uImage $(CURDIR)/output/
 	$(Q)cp $(CURDIR)/build/arch/arm/boot/dts/caninos_labrador.dtb $(CURDIR)/output/kernel.dtb
 
+ethernet:
+	$(Q)$(MAKE) -C $(CURDIR)/linux O=$(CURDIR)/build M=$(CURDIR)/linux/drivers/net/ethernet/caninos CROSS_COMPILE=arm-linux-gnueabihf- ARCH=arm
+
 clean:
 	$(Q)rm -rf build output
