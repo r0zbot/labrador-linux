@@ -127,7 +127,7 @@ struct rx_status_t {
 static int ethernet_mac_setup(void __iomem *regbase)
 {
     // hardware soft reset and set bus mode
-    INFO_MSG(" ethernet_mac_setup(void)");
+    INFO_MSG("ethernet_mac_setup");
     
     writel(readl(regbase) | EC_BMODE_SWR, regbase);
     
@@ -175,6 +175,7 @@ static int ethernet_mac_setup(void __iomem *regbase)
 
 static int labrador_eth_open(struct net_device *ndev)
 {
+    INFO_MSG("labrador_eth_open!");
     struct netdata_local *pldat = netdev_priv(ndev);
     int ret;
 
@@ -202,11 +203,13 @@ static int labrador_eth_open(struct net_device *ndev)
 
 static void labrador_eth_disable_int(void __iomem *regbase)
 {
+    INFO_MSG("labrador_eth_disable_int!");
     writel(0, LABRADOR_INT_ENABLE(regbase));
 }
 
 static irqreturn_t __labrador_eth_interrupt(int irq, void *dev_id)
 {
+    INFO_MSG("labrador_eth_drv_interrupt!");
     struct net_device *ndev = dev_id;
     struct netdata_local *pldat = netdev_priv(ndev);
     u32 tmp;
@@ -224,11 +227,6 @@ static irqreturn_t __labrador_eth_interrupt(int irq, void *dev_id)
     spin_unlock(&pldat->lock);
 
     return IRQ_HANDLED;
-}
-
-static int labrador_eth_drv_remove(struct platform_device *pdev)
-{
-    INFO_MSG("labrador_eth_drv_remove!");
 }
 
 static const struct ethtool_ops labrador_eth_ethtool_ops = {
@@ -316,15 +314,15 @@ static int labrador_eth_drv_probe(struct platform_device *pdev)
         goto err_out_iounmap;
     }
 
-    /* Setup driver functions */
-    ndev->netdev_ops = &labrador_netdev_ops;
-    ndev->ethtool_ops = &labrador_eth_ethtool_ops;
-    ndev->watchdog_timeo = msecs_to_jiffies(2500);
+    // /* Setup driver functions */
+    // ndev->netdev_ops = &labrador_netdev_ops;
+    // ndev->ethtool_ops = &labrador_eth_ethtool_ops;
+    // ndev->watchdog_timeo = msecs_to_jiffies(2500);
 
-    /* Get size of DMA buffers/descriptors region */
-    pldat->dma_buff_size = (TX_RING_SIZE + RX_RING_SIZE) * (ETH_PKG_MAX +
-        sizeof(struct txrx_desc_t) + sizeof(struct rx_status_t));
-    pldat->dma_buff_base_v = 0;
+    //  Get size of DMA buffers/descriptors region 
+    // pldat->dma_buff_size = (TX_RING_SIZE + RX_RING_SIZE) * (ETH_PKG_MAX +
+    //     sizeof(struct txrx_desc_t) + sizeof(struct rx_status_t));
+    // pldat->dma_buff_base_v = 0;
 
     return 0;
     
@@ -349,6 +347,37 @@ err_out_free_dev:
 err_exit:
     pr_err("%s: not found (%d).\n", MODNAME, ret);
     return ret;
+}
+
+static bool use_iram_for_net(struct device *dev)
+{
+    if (dev && dev->of_node)
+        return of_property_read_bool(dev->of_node, "use-iram");
+    return false;
+}
+
+static int labrador_eth_drv_remove(struct platform_device *pdev)
+{
+    INFO_MSG("labrador_eth_drv_remove!");
+    struct net_device *ndev = platform_get_drvdata(pdev);
+    struct netdata_local *pldat = netdev_priv(ndev);
+
+    unregister_netdev(ndev);
+
+    // if (!use_iram_for_net(&pldat->pdev->dev) ||
+    //     pldat->dma_buff_size > lpc32xx_return_iram_size())
+    //     dma_free_coherent(&pldat->pdev->dev, pldat->dma_buff_size,
+    //               pldat->dma_buff_base_v,
+    //               pldat->dma_buff_base_p);
+    free_irq(ndev->irq, ndev);
+    iounmap(pldat->net_base);
+    mdiobus_unregister(pldat->mii_bus);
+    mdiobus_free(pldat->mii_bus);
+    clk_disable_unprepare(pldat->clk);
+    clk_put(pldat->clk);
+    free_netdev(ndev);
+
+    return 0;
 }
 
 #ifdef CONFIG_OF
