@@ -362,7 +362,7 @@ static int labrador_eth_drv_remove(struct platform_device *pdev)
     struct net_device *ndev = platform_get_drvdata(pdev);
     struct netdata_local *pldat = netdev_priv(ndev);
 
-    unregister_netdev(ndev);
+    // unregister_netdev(ndev);
 
     // if (!use_iram_for_net(&pldat->pdev->dev) ||
     //     pldat->dma_buff_size > lpc32xx_return_iram_size())
@@ -371,10 +371,10 @@ static int labrador_eth_drv_remove(struct platform_device *pdev)
     //               pldat->dma_buff_base_p);
     free_irq(ndev->irq, ndev);
     iounmap(pldat->net_base);
-    mdiobus_unregister(pldat->mii_bus);
-    mdiobus_free(pldat->mii_bus);
-    clk_disable_unprepare(pldat->clk);
-    clk_put(pldat->clk);
+    // mdiobus_unregister(pldat->mii_bus);
+    // mdiobus_free(pldat->mii_bus);
+    // clk_disable_unprepare(pldat->clk);
+    // clk_put(pldat->clk);
     free_netdev(ndev);
 
     return 0;
