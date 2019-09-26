@@ -314,6 +314,8 @@ static int labrador_eth_drv_probe(struct platform_device *pdev)
         goto err_out_iounmap;
     }
 
+
+
     // /* Setup driver functions */
     // ndev->netdev_ops = &labrador_netdev_ops;
     // ndev->ethtool_ops = &labrador_eth_ethtool_ops;
@@ -324,6 +326,7 @@ static int labrador_eth_drv_probe(struct platform_device *pdev)
     //     sizeof(struct txrx_desc_t) + sizeof(struct rx_status_t));
     // pldat->dma_buff_base_v = 0;
 
+    free_irq(ndev->irq, ndev); // TIRAR ISSO!!!!
     return 0;
     
 err_out_unregister_netdev:
@@ -359,11 +362,11 @@ static bool use_iram_for_net(struct device *dev)
 static int labrador_eth_drv_remove(struct platform_device *pdev)
 {
     INFO_MSG("labrador_eth_drv_remove!");
-    struct net_device *ndev = platform_get_drvdata(pdev);
-    struct netdata_local *pldat = netdev_priv(ndev);
+    // struct net_device *ndev = platform_get_drvdata(pdev);
+    // struct netdata_local *pldat = netdev_priv(ndev);
 
-    if (ndev == NULL) INFO_MSG("ndev NULL");
-    if (pldat == NULL) INFO_MSG("pldat NULL");
+    // if (ndev == NULL) INFO_MSG("ndev NULL");
+    // if (pldat == NULL) INFO_MSG("pldat NULL");
 
     // unregister_netdev(ndev);
 
@@ -372,16 +375,16 @@ static int labrador_eth_drv_remove(struct platform_device *pdev)
     //     dma_free_coherent(&pldat->pdev->dev, pldat->dma_buff_size,
     //               pldat->dma_buff_base_v,
     //               pldat->dma_buff_base_p);
-    INFO_MSG("free_irq");
-    free_irq(ndev->irq, ndev);
-    INFO_MSG("iounmap");
-    iounmap(pldat->net_base);
+    // INFO_MSG("free_irq");
+    // free_irq(ndev->irq, ndev);
+    // INFO_MSG("iounmap");
+    // iounmap(pldat->net_base);
     // mdiobus_unregister(pldat->mii_bus);
     // mdiobus_free(pldat->mii_bus);
     // clk_disable_unprepare(pldat->clk);
     // clk_put(pldat->clk);
-    INFO_MSG("free_netdev");
-    free_netdev(ndev);
+    // INFO_MSG("free_netdev");
+    // free_netdev(ndev);
 
     return 0;
 }
