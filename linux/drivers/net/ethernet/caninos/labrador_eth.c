@@ -142,8 +142,8 @@ static int labrador_eth_drv_probe(struct platform_device *pdev)
     ndev->irq = irq;
 
     /* Get clock for the device */
-    pldat->clk = clk_get(&pdev->dev, NULL);
-    if (IS_ERR(pldat->clk)) {
+    pldat->clk = clk_get(&pdev->dev, CLKNAME_CMUMOD_ETHERNET);
+    if (IS_ERR    (pldat->clk)) {
         dev_err(&pdev->dev, "error getting clock.\n");
         ret = PTR_ERR(pldat->clk);
         goto err_out_free_dev;
