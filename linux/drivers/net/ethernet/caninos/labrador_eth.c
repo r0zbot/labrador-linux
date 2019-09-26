@@ -52,7 +52,8 @@
 #define TX_RING_SIZE 128 
 #define ETH_PKG_MAX 1518
 
-
+#define LABRADOR_INT_STATUS(x)  (x + 0x0028)
+#define LABRADOR_INT_ENABLE(x)  (x + 0x0038)
 
 #define INFO_MSG(fmt,...) pr_info(MODNAME ": " fmt, ##__VA_ARGS__)
 #define ERR_MSG(fmt,...) pr_err(MODNAME ": " fmt, ##__VA_ARGS__)
@@ -97,6 +98,32 @@ struct rx_status_t {
     __le32 statusinfo;
     __le32 statushashcrc;
 };
+
+static void labrador_eth_disable_int(void __iomem *regbase)
+{
+    writel(0, LABRADOR_INT_ENABLE(regbase));
+}
+
+static irqreturn_t __labrador_eth_interrupt(int irq, void *dev_id)
+{
+    struct net_device *ndev = dev_id;
+    struct netdata_local *pldat = netdev_priv(ndev);
+    u32 tmp;
+
+    spin_lock(&pldat->lock);
+
+    tmp = readl(LABRADOR_INT_STATUS(pldat->net_base));
+    /* Clear interrupts */
+    writel(tmp, LABRADOR_INT_STATUS(pldat->net_base));
+    
+    labrador_eth_disable_int(pldat->net_base);
+    if (likely(napi_schedule_prep(&pldat->napi)))
+        __napi_schedule(&pldat->napi);
+
+    spin_unlock(&pldat->lock);
+
+    return IRQ_HANDLED;
+}
 
 static int labrador_eth_drv_remove(struct platform_device *pdev)
 {
@@ -163,7 +190,7 @@ static int labrador_eth_drv_probe(struct platform_device *pdev)
         ret = -ENOMEM;
         goto err_out_disable_clocks;
     }
-    // ret = request_irq(ndev->irq, __labrador_eth_interrupt, 0, ndev->name, ndev);
+    ret = request_irq(ndev->irq, __labrador_eth_interrupt, IRQF_TRIGGER_HIGH, ndev->name, ndev);
     if (ret) {
         dev_err(&pdev->dev, "error requesting interrupt.\n");
         goto err_out_iounmap;
