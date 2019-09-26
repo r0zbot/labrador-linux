@@ -316,15 +316,15 @@ static int labrador_eth_drv_probe(struct platform_device *pdev)
         goto err_out_iounmap;
     }
 
-    /* Setup driver functions */
-    ndev->netdev_ops = &labrador_netdev_ops;
-    ndev->ethtool_ops = &labrador_eth_ethtool_ops;
-    ndev->watchdog_timeo = msecs_to_jiffies(2500);
+    // /* Setup driver functions */
+    // ndev->netdev_ops = &labrador_netdev_ops;
+    // ndev->ethtool_ops = &labrador_eth_ethtool_ops;
+    // ndev->watchdog_timeo = msecs_to_jiffies(2500);
 
-    /* Get size of DMA buffers/descriptors region */
-    pldat->dma_buff_size = (TX_RING_SIZE + RX_RING_SIZE) * (ETH_PKG_MAX +
-        sizeof(struct txrx_desc_t) + sizeof(struct rx_status_t));
-    pldat->dma_buff_base_v = 0;
+    //  Get size of DMA buffers/descriptors region 
+    // pldat->dma_buff_size = (TX_RING_SIZE + RX_RING_SIZE) * (ETH_PKG_MAX +
+    //     sizeof(struct txrx_desc_t) + sizeof(struct rx_status_t));
+    // pldat->dma_buff_base_v = 0;
 
     return 0;
     
