@@ -1,1 +1,1 @@
-cmd_/data/labrador-linux/linux/drivers/net/ethernet/caninos/built-in.o :=  rm -f /data/labrador-linux/linux/drivers/net/ethernet/caninos/built-in.o; arm-linux-gnueabihf-ar rcSTPD /data/labrador-linux/linux/drivers/net/ethernet/caninos/built-in.o
+cmd_/home/r0zbot/labradores/data/labrador-linux/linux/drivers/net/ethernet/caninos/built-in.o :=  rm -f /home/r0zbot/labradores/data/labrador-linux/linux/drivers/net/ethernet/caninos/built-in.o; arm-linux-gnueabihf-ar rcSTPD /home/r0zbot/labradores/data/labrador-linux/linux/drivers/net/ethernet/caninos/built-in.o

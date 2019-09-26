@@ -43,6 +43,8 @@
 #include <linux/of_net.h>
 #include <linux/types.h>
 
+#include <mach/clkname.h>
+
 #define MODNAME "labrador-eth"
 #define DRV_VERSION "1.00"
 
