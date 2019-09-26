@@ -369,12 +369,15 @@ static int labrador_eth_drv_remove(struct platform_device *pdev)
     //     dma_free_coherent(&pldat->pdev->dev, pldat->dma_buff_size,
     //               pldat->dma_buff_base_v,
     //               pldat->dma_buff_base_p);
+    INFO_MSG("free_irq");
     free_irq(ndev->irq, ndev);
+    INFO_MSG("iounmap");
     iounmap(pldat->net_base);
     // mdiobus_unregister(pldat->mii_bus);
     // mdiobus_free(pldat->mii_bus);
     // clk_disable_unprepare(pldat->clk);
     // clk_put(pldat->clk);
+    INFO_MSG("free_netdev");
     free_netdev(ndev);
 
     return 0;
