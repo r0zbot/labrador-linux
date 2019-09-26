@@ -362,6 +362,9 @@ static int labrador_eth_drv_remove(struct platform_device *pdev)
     struct net_device *ndev = platform_get_drvdata(pdev);
     struct netdata_local *pldat = netdev_priv(ndev);
 
+    if (ndev == NULL) INFO_MSG("ndev NULL");
+    if (pldat == NULL) INFO_MSG("pldat NULL");
+
     // unregister_netdev(ndev);
 
     // if (!use_iram_for_net(&pldat->pdev->dev) ||
