@@ -7,3 +7,6 @@ output/
 xt*
 ipt*
 ip6t*
+*.o
+*.cmd
+*.mod
