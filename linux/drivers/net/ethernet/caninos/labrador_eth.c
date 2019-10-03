@@ -78,10 +78,11 @@
 #define LABRADOR_INT_ENABLE(x)  (x + 0x0038) //CSR7
 #define LABRADOR_MAC_CSR10(x)  (x + 0x0050)
 #define LABRADOR_MAC_CSR11(x)  (x + 0x0058)
+#define LABRADOR_MAC_CSR16(x)  (x + 0x0080)
+#define LABRADOR_MAC_CSR17(x)  (x + 0x0088)
 #define LABRADOR_MAC_CSR18(x)  (x + 0x0090)
 #define LABRADOR_MAC_CSR19(x)  (x + 0x0098)
 #define LABRADOR_MAC_CSR20(x)  (x + 0x00A0)
-
 
 #define TXBD_STAT_OWN (0x1 << 31)
 #define TXBD_CTRL_TBS1(x)  ((x) & 0x7FF) // buf1 size
@@ -97,8 +98,13 @@
 #define TXBD_CTRL_LS (0x1 << 30) // last descriptor
 #define TXBD_CTRL_FS (0x1 << 29) // first descriptor
 
+#define ETH_MAC_LEN 6
+
 #define INFO_MSG(fmt,...) pr_info(MODNAME ": " fmt, ##__VA_ARGS__)
 #define ERR_MSG(fmt,...) pr_err(MODNAME ": " fmt, ##__VA_ARGS__)
+
+static char default_mac_addr[ETH_MAC_LEN] = {0x00, 0x18, 0xFE, 0x61, 0xD5, 0xD6};
+
 
 /*
  * Device driver data structure
@@ -146,9 +152,9 @@ struct rx_status_t {
 };
 
 static void 
-labrador_eth_reset(struct netdata_local *pldat)
+__labrador_eth_reset(struct netdata_local *pldat)
 {
-    INFO_MSG("labrador_eth_reset");
+    INFO_MSG("__labrador_eth_reset");
     writel(readl(pldat->net_base) | EC_BMODE_SWR, pldat->net_base);
     do {
         udelay(10);
@@ -209,7 +215,7 @@ labrador_eth_open(struct net_device *ndev)
     phy_resume(ndev->phydev);
 
     /* Reset and initialize */
-    labrador_eth_reset(pldat);
+    __labrador_eth_reset(pldat);
     labrador_eth_init(pldat);
 
     /* schedule a link state check */
@@ -334,6 +340,94 @@ out:
     return NETDEV_TX_OK;
 }
 
+/*
+ * MAC support functions
+ */
+static int labrador_set_mac_address(struct netdata_local *pldat, u8 *mac)
+{
+    u32 tmp;
+
+    /* Set station address */
+    tmp = mac[0] | ((u32)mac[1] << 8) | ((u32)mac[2] << 16);
+    writel(tmp, LABRADOR_MAC_CSR16(pldat->net_base));
+    tmp = mac[3] | ((u32)mac[4] << 8) | ((u32)mac[5] << 16);
+    writel(tmp, LABRADOR_MAC_CSR17(pldat->net_base));
+
+    netdev_dbg(pldat->ndev, "Ethernet MAC address %pM\n", mac);
+    return 0;
+}
+
+static void __labrador_get_mac(struct netdata_local *pldat, u8 *mac)
+{
+    // u32 tmp;
+
+    // /* Get station address */
+    // tmp = readl(LPC_ENET_SA2(pldat->net_base));
+    // mac[0] = tmp & 0xFF;
+    // mac[1] = tmp >> 8;
+    // tmp = readl(LPC_ENET_SA1(pldat->net_base));
+    // mac[2] = tmp & 0xFF;
+    // mac[3] = tmp >> 8;
+    // tmp = readl(LPC_ENET_SA0(pldat->net_base));
+    // mac[4] = tmp & 0xFF;
+    // mac[5] = tmp >> 8;
+
+    mac[0] = default_mac_addr[0];
+    mac[1] = default_mac_addr[1];
+    mac[2] = default_mac_addr[2];
+    mac[3] = default_mac_addr[3];
+    mac[4] = default_mac_addr[4];
+    mac[5] = default_mac_addr[5];
+}
+
+
+// static void labrador_eth_set_multicast_list(struct net_device *ndev)
+// {
+//     struct netdata_local *pldat = netdev_priv(ndev);
+//     struct netdev_hw_addr_list *mcptr = &ndev->mc;
+//     struct netdev_hw_addr *ha;
+//     u32 tmp32, hash_val, hashlo, hashhi;
+//     unsigned long flags;
+
+//     spin_lock_irqsave(&pldat->lock, flags);
+
+//     /* Set station address */
+//     labrador_set_mac_address(pldat, ndev->dev_addr);
+
+//     tmp32 =  LPC_RXFLTRW_ACCEPTUBROADCAST | LPC_RXFLTRW_ACCEPTPERFECT;
+
+//     if (ndev->flags & IFF_PROMISC)
+//         tmp32 |= LPC_RXFLTRW_ACCEPTUNICAST |
+//             LPC_RXFLTRW_ACCEPTUMULTICAST;
+//     if (ndev->flags & IFF_ALLMULTI)
+//         tmp32 |= LPC_RXFLTRW_ACCEPTUMULTICAST;
+
+//     if (netdev_hw_addr_list_count(mcptr))
+//         tmp32 |= LPC_RXFLTRW_ACCEPTUMULTICASTHASH;
+
+//     writel(tmp32, LPC_ENET_RXFILTER_CTRL(pldat->net_base));
+
+
+//     /* Set initial hash table */
+//     hashlo = 0x0;
+//     hashhi = 0x0;
+
+//     /* 64 bits : multicast address in hash table */
+//     netdev_hw_addr_list_for_each(ha, mcptr) {
+//         hash_val = (ether_crc(6, ha->addr) >> 23) & 0x3F;
+
+//         if (hash_val >= 32)
+//             hashhi |= 1 << (hash_val - 32);
+//         else
+//             hashlo |= 1 << hash_val;
+//     }
+
+//     writel(hashlo, LPC_ENET_HASHFILTERL(pldat->net_base));
+//     writel(hashhi, LPC_ENET_HASHFILTERH(pldat->net_base));
+
+//     spin_unlock_irqrestore(&pldat->lock, flags);
+// }
+
 static const struct ethtool_ops labrador_eth_ethtool_ops = {
     // .get_drvinfo    = labrador_eth_ethtool_getdrvinfo,
     // .get_msglevel    = labrador_eth_ethtool_getmsglevel,
@@ -346,12 +440,20 @@ static const struct ethtool_ops labrador_eth_ethtool_ops = {
 static const struct net_device_ops labrador_netdev_ops = {
     .ndo_open        = labrador_eth_open,
     .ndo_stop        = labrador_eth_close,
-    .ndo_start_xmit  = labrador_eth_hard_start_xmit
-    // .ndo_set_rx_mode    = labrador_eth_set_multicast_list,
+    .ndo_start_xmit  = labrador_eth_hard_start_xmit,
+    //.ndo_set_rx_mode    = labrador_eth_set_multicast_list,
     // .ndo_do_ioctl        = labrador_eth_ioctl,
-    // .ndo_set_mac_address    = labrador_set_mac_address,
+    //.ndo_set_mac_address    = labrador_set_mac_address,
     // .ndo_validate_addr    = eth_validate_addr,
 };
+
+// static void __labrador_eth_shutdown(struct netdata_local *pldat)
+// {
+//     /* Reset ethernet and power down PHY */
+//     __labrador_eth_reset(pldat);
+//     writel(0, LPC_ENET_MAC1(pldat->net_base));
+//     writel(0, LPC_ENET_MAC2(pldat->net_base));
+// }
 
 static int 
 labrador_eth_drv_probe(struct platform_device *pdev)
@@ -423,9 +525,9 @@ labrador_eth_drv_probe(struct platform_device *pdev)
 
 
     // /* Setup driver functions */
-    // ndev->netdev_ops = &labrador_netdev_ops;
+    ndev->netdev_ops = &labrador_netdev_ops;
     // ndev->ethtool_ops = &labrador_eth_ethtool_ops;
-    // ndev->watchdog_timeo = msecs_to_jiffies(2500);
+    ndev->watchdog_timeo = msecs_to_jiffies(2500);
 
     /* Get size of DMA buffers/descriptors region */
     pldat->dma_buff_size = (TX_RING_SIZE + RX_RING_SIZE) * (ENET_MAXF_SIZE +
@@ -463,6 +565,45 @@ labrador_eth_drv_probe(struct platform_device *pdev)
     netdev_dbg(ndev, "DMA buffer V address :0x%p\n",
             pldat->dma_buff_base_v);
 
+    /* Get MAC address from current HW setting (POR state is all zeros) */
+    __labrador_get_mac(pldat, ndev->dev_addr);
+
+    if (!is_valid_ether_addr(ndev->dev_addr)) {
+        const char *macaddr = of_get_mac_address(pdev->dev.of_node);
+        if (macaddr)
+            memcpy(ndev->dev_addr, macaddr, ETH_ALEN);
+    }
+    if (!is_valid_ether_addr(ndev->dev_addr))
+        eth_hw_addr_random(ndev);
+
+    /* Reset the ethernet controller */
+    __labrador_eth_reset(pldat);
+
+    //  then shut everything down to save power 
+    // __lpc_eth_shutdown(pldat);
+
+    /* Set default parameters */
+    pldat->msg_enable = NETIF_MSG_LINK;
+
+    //     /* Force an MII interface reset and clock setup */
+    // __lpc_mii_mngt_reset(pldat);
+
+    //  Force default PHY interface setup in chip, this will probably be
+    //    changed by the PHY driver 
+    // pldat->link = 0;
+    // pldat->speed = 100;
+    // pldat->duplex = DUPLEX_FULL;
+    // __lpc_params_setup(pldat);
+
+    // netif_napi_add(ndev, &pldat->napi, lpc_eth_poll, NAPI_WEIGHT);
+
+    ret = register_netdev(ndev);
+    if (ret) {
+        dev_err(&pdev->dev, "Cannot register net device, aborting.\n");
+        goto err_out_dma_unmap;
+    }
+    platform_set_drvdata(pdev, ndev);
+
     ////////////////////////////////////////////
     ////////////////////////////////////////////
     ////////////////////////////////////////////
@@ -473,12 +614,12 @@ labrador_eth_drv_probe(struct platform_device *pdev)
     
 err_out_unregister_netdev:
     unregister_netdev(ndev);
-// err_out_dma_unmap:
+err_out_dma_unmap:
 //     if (!use_iram_for_net(&pldat->pdev->dev) ||
 //         pldat->dma_buff_size > lpc32xx_return_iram_size())
-//         dma_free_coherent(&pldat->pdev->dev, pldat->dma_buff_size,
-//                   pldat->dma_buff_base_v,
-//                   pldat->dma_buff_base_p);
+        dma_free_coherent(&pldat->pdev->dev, pldat->dma_buff_size,
+                  pldat->dma_buff_base_v,
+                  pldat->dma_buff_base_p);
 err_out_free_irq:
     free_irq(ndev->irq, ndev);
 err_out_iounmap:
