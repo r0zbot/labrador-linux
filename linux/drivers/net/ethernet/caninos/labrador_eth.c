@@ -82,6 +82,21 @@
 #define LABRADOR_MAC_CSR19(x)  (x + 0x0098)
 #define LABRADOR_MAC_CSR20(x)  (x + 0x00A0)
 
+
+#define TXBD_STAT_OWN (0x1 << 31)
+#define TXBD_CTRL_TBS1(x)  ((x) & 0x7FF) // buf1 size
+
+#define RXBD_STAT_OWN (0x1 << 31)
+#define RXBD_CTRL_RBS1(x) ((x) & 0x7FF) // buffer1 size
+#define RXBD_CTRL_RER (0x1 << 25) // receive end of ring
+
+#define TXBD_CTRL_IC (0x1 << 31) // interrupt on completion
+#define TXBD_CTRL_TER (0x1 << 25) // transmit end of ring
+#define TXBD_CTRL_SET (0x1 << 27) // setup packet
+
+#define TXBD_CTRL_LS (0x1 << 30) // last descriptor
+#define TXBD_CTRL_FS (0x1 << 29) // first descriptor
+
 #define INFO_MSG(fmt,...) pr_info(MODNAME ": " fmt, ##__VA_ARGS__)
 #define ERR_MSG(fmt,...) pr_err(MODNAME ": " fmt, ##__VA_ARGS__)
 
@@ -96,7 +111,7 @@ struct netdata_local {
     u32                     msg_enable;
     unsigned int            skblen[TX_RING_SIZE];
     unsigned int            last_tx_idx;
-    unsigned int            txidx = 0; //TODO ??
+    unsigned int            txidx; //TODO ??
     unsigned int            ethernet_skb_cur;
     unsigned int            num_used_tx_buffs;
     struct mii_bus          *mii_bus;
@@ -263,42 +278,6 @@ labrador_eth_close(struct net_device *ndev)
     return 0;
 }
 
-static int ethernet_tx_buffer_alloc(struct netdata_local *pldat)
-{
-    const u32 total = sizeof(struct ethernet_buffer_desc) * TX_RING_SIZE;
-    INFO_MSG(" ethernet_tx_buffer_alloc(void)");
-    dma_addr_t * paddr = &ethernet_tx_buf_paddr;
-    int i;
-    for (i = 0; i < TX_RING_SIZE; i++) {
-        ethernet_tx_skb[i] = NULL;
-    }
-    //GFP_ATOMIC
-    //ethernet_tx_buf = dma_alloc_coherent(NULL, total, paddr, GFP_KERNEL);
-    ethernet_tx_buf = dma_alloc_coherent(NULL, total, paddr, GFP_NOWAIT);
-    if (!ethernet_tx_buf)
-    {
-        ethernet_tx_buf = NULL;
-        *paddr = (dma_addr_t)(0);
-        return -ENOMEM;
-    }
-    
-    ethernet_cur_tx    = ethernet_tx_buf;
-    ethernet_dirty_tx  = ethernet_tx_buf;
-    ethernet_skb_cur   = 0;
-    ethernet_skb_dirty = 0;
-    ethernet_tx_full   = false;
-    
-    for (i = 0; i < TX_RING_SIZE; i++)
-    {
-        ethernet_tx_buf[i].status   = 0;
-        ethernet_tx_buf[i].control  = TXBD_CTRL_IC;
-        ethernet_tx_buf[i].buf_addr = 0;
-        ethernet_tx_buf[i].reserved = 0;
-    }
-    
-    ethernet_tx_buf[i - 1].control |= TXBD_CTRL_TER;
-    return 0;
-}
 
 static int 
 labrador_eth_hard_start_xmit(struct sk_buff *skb, struct net_device *ndev)
@@ -339,23 +318,10 @@ labrador_eth_hard_start_xmit(struct sk_buff *skb, struct net_device *ndev)
     
     writel(EC_TXPOLL_ST, LABRADOR_MAC_CSR1(pldat->net_base));
 
-    ndev->stats.tx_bytes += skb->len;
-    
     pldat->skblen[pldat->txidx] = skb->len;
 
     /* Save the buffer and increment the buffer counter */
     pldat->num_used_tx_buffs++;
-
-    if (!(readl(LABRADOR_INT_STATUS(pldat->net_base)) & EC_STATUS_TSM))
-        ERR_MSG("TX stopped\n");
-    
-    if (pldat -> tx_desc_v -> control & TXBD_CTRL_TER) {
-        ethernet_cur_tx = ethernet_tx_buf;
-    }
-    else {
-        ethernet_cur_tx++;
-    }
-    
     
     /* Stop queue if no more TX buffers */
     if (pldat->num_used_tx_buffs >= (TX_RING_SIZE - 1))
@@ -462,7 +428,7 @@ labrador_eth_drv_probe(struct platform_device *pdev)
     // ndev->watchdog_timeo = msecs_to_jiffies(2500);
 
     /* Get size of DMA buffers/descriptors region */
-    pldat->dma_buff_size = (ENET_TX_DESC + ENET_RX_DESC) * (ENET_MAXF_SIZE +
+    pldat->dma_buff_size = (TX_RING_SIZE + RX_RING_SIZE) * (ENET_MAXF_SIZE +
         sizeof(struct txrx_desc_t) + sizeof(struct rx_status_t));
     pldat->dma_buff_base_v = 0;
 
