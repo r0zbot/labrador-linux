@@ -262,85 +262,85 @@ labrador_eth_close(struct net_device *ndev)
     return 0;
 }
 
-// static int 
-// labrador_eth_hard_start_xmit(struct sk_buff *skb, struct net_device *ndev)
-// {
-//     struct netdata_local *pldat = netdev_priv(ndev);
-//     u32 len, txidx;
-//     u32 *ptxstat;
-//     struct txrx_desc_t *ptxrxdesc;
-//     dma_addr_t dma_addr;
+static int 
+labrador_eth_hard_start_xmit(struct sk_buff *skb, struct net_device *ndev)
+{
+    struct netdata_local *pldat = netdev_priv(ndev);
+    u32 len, txidx;
+    u32 *ptxstat;
+    struct txrx_desc_t *ptxrxdesc;
+    dma_addr_t dma_addr;
 
-//     spin_lock_irq(&pldat->lock);
+    spin_lock_irq(&pldat->lock);
 
-//     if (pldat->num_used_tx_buffs >= (TX_RING_SIZE - 1)) {
-//         /* This function should never be called when there are no
-//            buffers */
-//         netif_stop_queue(ndev);
-//         spin_unlock_irq(&pldat->lock);
-//         WARN(1, "BUG! TX request when no free TX buffers!\n");
-//         return NETDEV_TX_BUSY;
-//     }
+    if (pldat->num_used_tx_buffs >= (TX_RING_SIZE - 1)) {
+        /* This function should never be called when there are no
+           buffers */
+        netif_stop_queue(ndev);
+        spin_unlock_irq(&pldat->lock);
+        WARN(1, "BUG! TX request when no free TX buffers!\n");
+        return NETDEV_TX_BUSY;
+    }
 
-//     if (skb -> len > ENET_MAXF_SIZE) {
-//         ERR_MSG("Invalid TX length\n");
-//         goto out;
-//     }
+    if (skb -> len > ENET_MAXF_SIZE) {
+        ERR_MSG("Invalid TX length\n");
+        goto out;
+    }
 
-//     dma_addr = dma_map_single(pldat->pdev->dev, skb->data, skb->len, DMA_TO_DEVICE);
+    dma_addr = dma_map_single(pldat->pdev->dev, skb->data, skb->len, DMA_TO_DEVICE);
     
-//     if (dma_mapping_error(pldat->pdev->dev, dma_addr)) {
-//         ERR_MSG("DMA map single failed\n");
-//         goto out;
-//     }
+    if (dma_mapping_error(pldat->pdev->dev, dma_addr)) {
+        ERR_MSG("DMA map single failed\n");
+        goto out;
+    }
 
-//     pldat -> tx_desc_v -> buf_addr = (u32) dma_addr;
-//     pldat -> tx_desc_v -> status = 0;
+    pldat -> tx_desc_v -> buf_addr = (u32) dma_addr;
+    pldat -> tx_desc_v -> status = 0;
     
-//     pldat -> tx_desc_v -> control &= TXBD_CTRL_IC | TXBD_CTRL_TER;
-//     pldat -> tx_desc_v -> control |= TXBD_CTRL_TBS1(skb->len);
-//     pldat -> tx_desc_v -> control |= TXBD_CTRL_FS | TXBD_CTRL_LS;
-//     mb();
+    pldat -> tx_desc_v -> control &= TXBD_CTRL_IC | TXBD_CTRL_TER;
+    pldat -> tx_desc_v -> control |= TXBD_CTRL_TBS1(skb->len);
+    pldat -> tx_desc_v -> control |= TXBD_CTRL_FS | TXBD_CTRL_LS;
+    mb();
     
-//     pldat -> tx_desc_v -> status = TXBD_STAT_OWN;
-//     mb();
+    pldat -> tx_desc_v -> status = TXBD_STAT_OWN;
+    mb();
     
-//     writel(EC_TXPOLL_ST, LABRADOR_MAC_CSR1(pldat->net_base));
+    writel(EC_TXPOLL_ST, LABRADOR_MAC_CSR1(pldat->net_base));
 
-//     ndev->stats.tx_bytes += skb->len;
+    ndev->stats.tx_bytes += skb->len;
     
-//     pldat->skblen[pldat->ethernet_skb_cur] = skb->len;
-//     pldat->ethernet_skb_cur = (pldat->ethernet_skb_cur + 1) & TX_RING_MOD_MASK;
+    pldat->skblen[pldat->ethernet_skb_cur] = skb->len;
+    pldat->ethernet_skb_cur = (pldat->ethernet_skb_cur + 1) & TX_RING_MOD_MASK;
 
-//     /* Save the buffer and increment the buffer counter */
-//     pldat->num_used_tx_buffs++;
+    /* Save the buffer and increment the buffer counter */
+    pldat->num_used_tx_buffs++;
 
-//     /* Start transmit */
-//     if (!(act_readl(MAC_CSR5) & EC_STATUS_TSM))
-//     {
-//         ERR_MSG("TX stopped\n");
-//     }
+    /* Start transmit */
+    if (!(act_readl(MAC_CSR5) & EC_STATUS_TSM))
+    {
+        ERR_MSG("TX stopped\n");
+    }
     
-//     ////
+    ////
     
-//     if (ethernet_cur_tx->control & TXBD_CTRL_TER) {
-//         ethernet_cur_tx = ethernet_tx_buf;
-//     }
-//     else {
-//         ethernet_cur_tx++;
-//     }
+    if (ethernet_cur_tx->control & TXBD_CTRL_TER) {
+        ethernet_cur_tx = ethernet_tx_buf;
+    }
+    else {
+        ethernet_cur_tx++;
+    }
     
     
-//     /* Stop queue if no more TX buffers */
-//     if (pldat->num_used_tx_buffs >= (TX_RING_SIZE - 1))
-//         netif_stop_queue(ndev);
+    /* Stop queue if no more TX buffers */
+    if (pldat->num_used_tx_buffs >= (TX_RING_SIZE - 1))
+        netif_stop_queue(ndev);
 
-// out:    
-//     dev_kfree_skb(skb);
-//     spin_unlock_irq(&pldat->lock);
+out:    
+    dev_kfree_skb(skb);
+    spin_unlock_irq(&pldat->lock);
 
-//     return NETDEV_TX_OK;
-// }
+    return NETDEV_TX_OK;
+}
 
 static const struct ethtool_ops labrador_eth_ethtool_ops = {
     // .get_drvinfo    = labrador_eth_ethtool_getdrvinfo,
@@ -353,8 +353,8 @@ static const struct ethtool_ops labrador_eth_ethtool_ops = {
 
 static const struct net_device_ops labrador_netdev_ops = {
     .ndo_open        = labrador_eth_open,
-    .ndo_stop        = labrador_eth_close
-    // .ndo_start_xmit  = labrador_eth_hard_start_xmit,
+    .ndo_stop        = labrador_eth_close,
+    .ndo_start_xmit  = labrador_eth_hard_start_xmit
     // .ndo_set_rx_mode    = labrador_eth_set_multicast_list,
     // .ndo_do_ioctl        = labrador_eth_ioctl,
     // .ndo_set_mac_address    = labrador_set_mac_address,

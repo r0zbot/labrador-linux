@@ -1,7 +1,15 @@
-config LABRADOR_ENET
-        tristate "LABRADOR ethernet MAC on CANINOS devices"
-        select PHYLIB
-        help
-	  Say Y or M here if you want to use the NXP ethernet MAC included on
-	  some NXP LPC devices. You can safely enable this option for LPC32xx
-	  SoC. Also available as a module.
+config NET_VENDOR_ACTS
+	tristate "Actions Ethernet driver"
+	default m
+	---help---
+		enable Actions Semi 520X ethernet driver
+config POLL_PHY_STATE
+	tristate "Phy state check"
+	default n
+	---help---
+		poll the phy's sate
+config PHY_RTL8201_SR8201G
+	tristate "phy type"
+	default n
+	---help---
+		compatible with realtek rtl8201 and corechip sr8201g
