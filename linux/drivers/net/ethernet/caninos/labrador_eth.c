@@ -90,29 +90,30 @@
  */
 struct netdata_local {
     struct platform_device  *pdev;
-    struct net_device   *ndev;
-    spinlock_t      lock;
-    void __iomem        *net_base;
-    u32         msg_enable;
-    unsigned int        skblen[TX_RING_SIZE];
-    unsigned int        last_tx_idx;
-    unsigned int        ethernet_skb_cur;
-    unsigned int        num_used_tx_buffs;
-    struct mii_bus      *mii_bus;
-    struct clk      *clk;
-    dma_addr_t      dma_buff_base_p;
-    void            *dma_buff_base_v;
-    size_t          dma_buff_size;
-    struct txrx_desc_t  *tx_desc_v;
-    u32         *tx_stat_v;
-    void            *tx_buff_v;
-    struct txrx_desc_t  *rx_desc_v;
-    struct rx_status_t  *rx_stat_v;
-    void            *rx_buff_v;
-    int         link;
-    int         speed;
-    int         duplex;
-    struct napi_struct  napi;
+    struct net_device       *ndev;
+    spinlock_t              lock;
+    void __iomem            *net_base;
+    u32                     msg_enable;
+    unsigned int            skblen[TX_RING_SIZE];
+    unsigned int            last_tx_idx;
+    unsigned int            txidx = 0; //TODO ??
+    unsigned int            ethernet_skb_cur;
+    unsigned int            num_used_tx_buffs;
+    struct mii_bus          *mii_bus;
+    struct clk              *clk;
+    dma_addr_t              dma_buff_base_p;
+    void                    *dma_buff_base_v;
+    size_t                  dma_buff_size;
+    struct txrx_desc_t      *tx_desc_v;
+    u32                     *tx_stat_v;
+    void                    *tx_buff_v;
+    struct txrx_desc_t      *rx_desc_v;
+    struct rx_status_t      *rx_stat_v;
+    void                    *rx_buff_v;
+    int                     link;
+    int                     speed;
+    int                     duplex;
+    struct napi_struct      napi;
 };
 
 /*
@@ -163,7 +164,7 @@ labrador_eth_init(struct netdata_local *pldat)
     LABRADOR_MAC_CSR6(pldat->net_base)); //100M
     writel(readl(LABRADOR_MAC_CSR6(pldat->net_base)) & (~EC_OPMODE_PR), 
         LABRADOR_MAC_CSR6(pldat->net_base));
-    
+
     //interrupt mitigation control register
     //NRP =7, RT =1, CS=0
     writel(0x004e0000, LABRADOR_MAC_CSR11(pldat->net_base));
@@ -262,11 +263,47 @@ labrador_eth_close(struct net_device *ndev)
     return 0;
 }
 
+static int ethernet_tx_buffer_alloc(struct netdata_local *pldat)
+{
+    const u32 total = sizeof(struct ethernet_buffer_desc) * TX_RING_SIZE;
+    INFO_MSG(" ethernet_tx_buffer_alloc(void)");
+    dma_addr_t * paddr = &ethernet_tx_buf_paddr;
+    int i;
+    for (i = 0; i < TX_RING_SIZE; i++) {
+        ethernet_tx_skb[i] = NULL;
+    }
+    //GFP_ATOMIC
+    //ethernet_tx_buf = dma_alloc_coherent(NULL, total, paddr, GFP_KERNEL);
+    ethernet_tx_buf = dma_alloc_coherent(NULL, total, paddr, GFP_NOWAIT);
+    if (!ethernet_tx_buf)
+    {
+        ethernet_tx_buf = NULL;
+        *paddr = (dma_addr_t)(0);
+        return -ENOMEM;
+    }
+    
+    ethernet_cur_tx    = ethernet_tx_buf;
+    ethernet_dirty_tx  = ethernet_tx_buf;
+    ethernet_skb_cur   = 0;
+    ethernet_skb_dirty = 0;
+    ethernet_tx_full   = false;
+    
+    for (i = 0; i < TX_RING_SIZE; i++)
+    {
+        ethernet_tx_buf[i].status   = 0;
+        ethernet_tx_buf[i].control  = TXBD_CTRL_IC;
+        ethernet_tx_buf[i].buf_addr = 0;
+        ethernet_tx_buf[i].reserved = 0;
+    }
+    
+    ethernet_tx_buf[i - 1].control |= TXBD_CTRL_TER;
+    return 0;
+}
+
 static int 
 labrador_eth_hard_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 {
     struct netdata_local *pldat = netdev_priv(ndev);
-    u32 len, txidx;
     u32 *ptxstat;
     struct txrx_desc_t *ptxrxdesc;
     dma_addr_t dma_addr;
@@ -287,12 +324,8 @@ labrador_eth_hard_start_xmit(struct sk_buff *skb, struct net_device *ndev)
         goto out;
     }
 
-    dma_addr = dma_map_single(pldat->pdev->dev, skb->data, skb->len, DMA_TO_DEVICE);
-    
-    if (dma_mapping_error(pldat->pdev->dev, dma_addr)) {
-        ERR_MSG("DMA map single failed\n");
-        goto out;
-    }
+    /* Copy data to the DMA buffer */
+    memcpy(pldat->tx_buff_v + pldat->txidx * ENET_MAXF_SIZE, skb->data, skb->len);
 
     pldat -> tx_desc_v -> buf_addr = (u32) dma_addr;
     pldat -> tx_desc_v -> status = 0;
@@ -301,7 +334,6 @@ labrador_eth_hard_start_xmit(struct sk_buff *skb, struct net_device *ndev)
     pldat -> tx_desc_v -> control |= TXBD_CTRL_TBS1(skb->len);
     pldat -> tx_desc_v -> control |= TXBD_CTRL_FS | TXBD_CTRL_LS;
     mb();
-    
     pldat -> tx_desc_v -> status = TXBD_STAT_OWN;
     mb();
     
@@ -309,21 +341,15 @@ labrador_eth_hard_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 
     ndev->stats.tx_bytes += skb->len;
     
-    pldat->skblen[pldat->ethernet_skb_cur] = skb->len;
-    pldat->ethernet_skb_cur = (pldat->ethernet_skb_cur + 1) & TX_RING_MOD_MASK;
+    pldat->skblen[pldat->txidx] = skb->len;
 
     /* Save the buffer and increment the buffer counter */
     pldat->num_used_tx_buffs++;
 
-    /* Start transmit */
-    if (!(act_readl(MAC_CSR5) & EC_STATUS_TSM))
-    {
+    if (!(readl(LABRADOR_INT_STATUS(pldat->net_base)) & EC_STATUS_TSM))
         ERR_MSG("TX stopped\n");
-    }
     
-    ////
-    
-    if (ethernet_cur_tx->control & TXBD_CTRL_TER) {
+    if (pldat -> tx_desc_v -> control & TXBD_CTRL_TER) {
         ethernet_cur_tx = ethernet_tx_buf;
     }
     else {
@@ -435,10 +461,42 @@ labrador_eth_drv_probe(struct platform_device *pdev)
     // ndev->ethtool_ops = &labrador_eth_ethtool_ops;
     // ndev->watchdog_timeo = msecs_to_jiffies(2500);
 
-    //  Get size of DMA buffers/descriptors region 
-    // pldat->dma_buff_size = (TX_RING_SIZE + RX_RING_SIZE) * (ENET_MAXF_SIZE +
-    //     sizeof(struct txrx_desc_t) + sizeof(struct rx_status_t));
-    // pldat->dma_buff_base_v = 0;
+    /* Get size of DMA buffers/descriptors region */
+    pldat->dma_buff_size = (ENET_TX_DESC + ENET_RX_DESC) * (ENET_MAXF_SIZE +
+        sizeof(struct txrx_desc_t) + sizeof(struct rx_status_t));
+    pldat->dma_buff_base_v = 0;
+
+    if (pldat->dma_buff_base_v == 0) {
+        ret = dma_coerce_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32));
+        if (ret)
+            goto err_out_free_irq;
+
+        pldat->dma_buff_size = PAGE_ALIGN(pldat->dma_buff_size);
+
+        /* Allocate a chunk of memory for the DMA ethernet buffers
+           and descriptors */
+        pldat->dma_buff_base_v =
+            dma_alloc_coherent(&pldat->pdev->dev,
+                       pldat->dma_buff_size, &dma_handle,
+                       GFP_KERNEL);
+        if (pldat->dma_buff_base_v == NULL) {
+            ret = -ENOMEM;
+            goto err_out_free_irq;
+        }
+    }
+    pldat->dma_buff_base_p = dma_handle;
+
+    netdev_dbg(ndev, "IO address space     :%pR\n", res);
+    netdev_dbg(ndev, "IO address size      :%d\n", resource_size(res));
+    netdev_dbg(ndev, "IO address (mapped)  :0x%p\n",
+            pldat->net_base);
+    netdev_dbg(ndev, "IRQ number           :%d\n", ndev->irq);
+    netdev_dbg(ndev, "DMA buffer size      :%d\n", pldat->dma_buff_size);
+    netdev_dbg(ndev, "DMA buffer P address :0x%08x\n",
+            pldat->dma_buff_base_p);
+    netdev_dbg(ndev, "DMA buffer V address :0x%p\n",
+            pldat->dma_buff_base_v);
+
     ////////////////////////////////////////////
     ////////////////////////////////////////////
     ////////////////////////////////////////////
