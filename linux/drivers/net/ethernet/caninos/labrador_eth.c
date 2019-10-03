@@ -50,7 +50,8 @@
 
 #define RX_RING_SIZE 64
 #define TX_RING_SIZE 128 
-#define ETH_PKG_MAX 1518
+
+#define ENET_MAXF_SIZE 1518
 
 #define EC_BMODE_SWR (0x1) // software reset
 #define EC_CACHETHR_CPTL(x) (((x) & 0xFF) << 24) // cache pause threshold level
@@ -71,6 +72,7 @@
 
 #define LABRADOR_MAC_CTRL(x)  (x + 0x00B0)
 
+#define LABRADOR_MAC_CSR1(x)  (x + 0x0008)
 #define LABRADOR_INT_STATUS(x)  (x + 0x0028) //CSR5
 #define LABRADOR_MAC_CSR6(x)  (x + 0x0030)
 #define LABRADOR_INT_ENABLE(x)  (x + 0x0038) //CSR7
@@ -92,8 +94,9 @@ struct netdata_local {
     spinlock_t      lock;
     void __iomem        *net_base;
     u32         msg_enable;
-    // unsigned int        skblen[ENET_TX_DESC];
+    unsigned int        skblen[TX_RING_SIZE];
     unsigned int        last_tx_idx;
+    unsigned int        ethernet_skb_cur;
     unsigned int        num_used_tx_buffs;
     struct mii_bus      *mii_bus;
     struct clk      *clk;
@@ -118,62 +121,62 @@ struct netdata_local {
 struct txrx_desc_t {
     __le32 packet;
     __le32 control;
+    __le32 buf_addr;
+    __le32 status;
 };
 struct rx_status_t {
     __le32 statusinfo;
     __le32 statushashcrc;
 };
 
-static int ethernet_mac_setup(void __iomem *regbase)
+static void 
+labrador_eth_reset(struct netdata_local *pldat)
 {
-    // hardware soft reset and set bus mode
-    INFO_MSG("ethernet_mac_setup");
-    
-    writel(readl(regbase) | EC_BMODE_SWR, regbase);
-    
+    INFO_MSG("labrador_eth_reset");
+    writel(readl(pldat->net_base) | EC_BMODE_SWR, pldat->net_base);
     do {
         udelay(10);
-    } while (readl(regbase) & EC_BMODE_SWR);
-    
-    // select clk input from external phy
+    } while (readl(pldat->net_base) & EC_BMODE_SWR);
+}
 
-    writel(readl(LABRADOR_MAC_CTRL(regbase)) | (0x1 << 1), LABRADOR_MAC_CTRL(regbase));
-    
-    writel(0, LABRADOR_MAC_CSR10(regbase));
-    
-    writel(0xcc000000, LABRADOR_MAC_CSR10(regbase));
+static void 
+labrador_eth_init(struct netdata_local *pldat)
+{
+    INFO_MSG("labrador_eth_init");
+    // select clk input from external phy
+    writel(readl(LABRADOR_MAC_CTRL(pldat->net_base)) | (0x1 << 1), 
+        LABRADOR_MAC_CTRL(pldat->net_base));
+    writel(0, LABRADOR_MAC_CSR10(pldat->net_base));
+    writel(0xcc000000, LABRADOR_MAC_CSR10(pldat->net_base));
     
     // set flow control mode and force transmiter to pause about 100ms
-    
     writel(EC_CACHETHR_CPTL(0x0) | EC_CACHETHR_CRTL(0x0) | 
-               EC_CACHETHR_PQT(0x4FFF), LABRADOR_MAC_CSR18(regbase));
+               EC_CACHETHR_PQT(0x4FFF), LABRADOR_MAC_CSR18(pldat->net_base));
+    writel(EC_FIFOTHR_FPTL(0x40) | EC_FIFOTHR_FRTL(0x10), 
+        LABRADOR_MAC_CSR19(pldat->net_base));
+    writel(EC_FLOWCTRL_ENALL, LABRADOR_MAC_CSR20(pldat->net_base));
     
-    writel(EC_FIFOTHR_FPTL(0x40) | EC_FIFOTHR_FRTL(0x10), LABRADOR_MAC_CSR19(regbase));
-    
-    writel(EC_FLOWCTRL_ENALL, LABRADOR_MAC_CSR20(regbase));
-    
-    // always set to work as full duplex because of a MAC bug
-    
-    writel(readl(LABRADOR_MAC_CSR6(regbase)) | EC_OPMODE_FD, LABRADOR_MAC_CSR6(regbase)); //Full-duplex
-    
-    writel(readl(LABRADOR_MAC_CSR6(regbase)) & ~EC_OPMODE_10M, LABRADOR_MAC_CSR6(regbase)); //100M
-    
-    writel(readl(LABRADOR_MAC_CSR6(regbase)) & (~EC_OPMODE_PR), LABRADOR_MAC_CSR6(regbase));
+    // always set to work as full duplex 
+    writel(readl(LABRADOR_MAC_CSR6(pldat->net_base)) | EC_OPMODE_FD, 
+    LABRADOR_MAC_CSR6(pldat->net_base)); //Full-duplex
+    writel(readl(LABRADOR_MAC_CSR6(pldat->net_base)) & ~EC_OPMODE_10M, 
+    LABRADOR_MAC_CSR6(pldat->net_base)); //100M
+    writel(readl(LABRADOR_MAC_CSR6(pldat->net_base)) & (~EC_OPMODE_PR), 
+        LABRADOR_MAC_CSR6(pldat->net_base));
     
     //interrupt mitigation control register
     //NRP =7, RT =1, CS=0
-    
-    writel(0x004e0000, LABRADOR_MAC_CSR11(regbase));
+    writel(0x004e0000, LABRADOR_MAC_CSR11(pldat->net_base));
     
     // stop tx and rx and disable interrupts
-    
-    writel(readl(LABRADOR_MAC_CSR6(regbase)) & (~(EC_OPMODE_ST | EC_OPMODE_SR)), LABRADOR_MAC_CSR6(regbase));
-    writel(0, LABRADOR_INT_ENABLE(regbase));
-    
-    return 0;
+    writel(readl(LABRADOR_MAC_CSR6(pldat->net_base)) & 
+        (~(EC_OPMODE_ST | EC_OPMODE_SR)), 
+        LABRADOR_MAC_CSR6(pldat->net_base));
+    writel(0, LABRADOR_INT_ENABLE(pldat->net_base));
 }
 
-static int labrador_eth_open(struct net_device *ndev)
+static int 
+labrador_eth_open(struct net_device *ndev)
 {
     INFO_MSG("labrador_eth_open!");
     struct netdata_local *pldat = netdev_priv(ndev);
@@ -190,7 +193,8 @@ static int labrador_eth_open(struct net_device *ndev)
     phy_resume(ndev->phydev);
 
     /* Reset and initialize */
-    ethernet_mac_setup(pldat);
+    labrador_eth_reset(pldat);
+    labrador_eth_init(pldat);
 
     /* schedule a link state check */
     phy_start(ndev->phydev);
@@ -201,15 +205,17 @@ static int labrador_eth_open(struct net_device *ndev)
 }
 
 
-static void labrador_eth_disable_int(void __iomem *regbase)
+static void 
+labrador_eth_disable_int(void __iomem *regbase)
 {
     INFO_MSG("labrador_eth_disable_int!");
     writel(0, LABRADOR_INT_ENABLE(regbase));
 }
 
-static irqreturn_t __labrador_eth_interrupt(int irq, void *dev_id)
+static irqreturn_t 
+__labrador_eth_interrupt(int irq, void *dev_id)
 {
-    INFO_MSG("labrador_eth_drv_interrupt!");
+    INFO_MSG("labrador_eth_drv_interrupt");
     struct net_device *ndev = dev_id;
     struct netdata_local *pldat = netdev_priv(ndev);
     u32 tmp;
@@ -229,6 +235,113 @@ static irqreturn_t __labrador_eth_interrupt(int irq, void *dev_id)
     return IRQ_HANDLED;
 }
 
+static int 
+labrador_eth_close(struct net_device *ndev)
+{
+    INFO_MSG("labrador_eth_close");
+    unsigned long flags;
+    struct netdata_local *pldat = netdev_priv(ndev);
+
+    if (netif_msg_ifdown(pldat))
+        dev_dbg(&pldat->pdev->dev, "shutting down %s\n", ndev->name);
+
+    napi_disable(&pldat->napi);
+    netif_stop_queue(ndev);
+
+    if (ndev->phydev)
+        phy_stop(ndev->phydev);
+
+    // TODO: o que e esperado dessa funcao?? resetar??
+    spin_lock_irqsave(&pldat->lock, flags);
+    netif_stop_queue(ndev);
+    netif_carrier_off(ndev);
+    spin_unlock_irqrestore(&pldat->lock, flags);
+
+    clk_disable_unprepare(pldat->clk);
+
+    return 0;
+}
+
+// static int 
+// labrador_eth_hard_start_xmit(struct sk_buff *skb, struct net_device *ndev)
+// {
+//     struct netdata_local *pldat = netdev_priv(ndev);
+//     u32 len, txidx;
+//     u32 *ptxstat;
+//     struct txrx_desc_t *ptxrxdesc;
+//     dma_addr_t dma_addr;
+
+//     spin_lock_irq(&pldat->lock);
+
+//     if (pldat->num_used_tx_buffs >= (TX_RING_SIZE - 1)) {
+//         /* This function should never be called when there are no
+//            buffers */
+//         netif_stop_queue(ndev);
+//         spin_unlock_irq(&pldat->lock);
+//         WARN(1, "BUG! TX request when no free TX buffers!\n");
+//         return NETDEV_TX_BUSY;
+//     }
+
+//     if (skb -> len > ENET_MAXF_SIZE) {
+//         ERR_MSG("Invalid TX length\n");
+//         goto out;
+//     }
+
+//     dma_addr = dma_map_single(pldat->pdev->dev, skb->data, skb->len, DMA_TO_DEVICE);
+    
+//     if (dma_mapping_error(pldat->pdev->dev, dma_addr)) {
+//         ERR_MSG("DMA map single failed\n");
+//         goto out;
+//     }
+
+//     pldat -> tx_desc_v -> buf_addr = (u32) dma_addr;
+//     pldat -> tx_desc_v -> status = 0;
+    
+//     pldat -> tx_desc_v -> control &= TXBD_CTRL_IC | TXBD_CTRL_TER;
+//     pldat -> tx_desc_v -> control |= TXBD_CTRL_TBS1(skb->len);
+//     pldat -> tx_desc_v -> control |= TXBD_CTRL_FS | TXBD_CTRL_LS;
+//     mb();
+    
+//     pldat -> tx_desc_v -> status = TXBD_STAT_OWN;
+//     mb();
+    
+//     writel(EC_TXPOLL_ST, LABRADOR_MAC_CSR1(pldat->net_base));
+
+//     ndev->stats.tx_bytes += skb->len;
+    
+//     pldat->skblen[pldat->ethernet_skb_cur] = skb->len;
+//     pldat->ethernet_skb_cur = (pldat->ethernet_skb_cur + 1) & TX_RING_MOD_MASK;
+
+//     /* Save the buffer and increment the buffer counter */
+//     pldat->num_used_tx_buffs++;
+
+//     /* Start transmit */
+//     if (!(act_readl(MAC_CSR5) & EC_STATUS_TSM))
+//     {
+//         ERR_MSG("TX stopped\n");
+//     }
+    
+//     ////
+    
+//     if (ethernet_cur_tx->control & TXBD_CTRL_TER) {
+//         ethernet_cur_tx = ethernet_tx_buf;
+//     }
+//     else {
+//         ethernet_cur_tx++;
+//     }
+    
+    
+//     /* Stop queue if no more TX buffers */
+//     if (pldat->num_used_tx_buffs >= (TX_RING_SIZE - 1))
+//         netif_stop_queue(ndev);
+
+// out:    
+//     dev_kfree_skb(skb);
+//     spin_unlock_irq(&pldat->lock);
+
+//     return NETDEV_TX_OK;
+// }
+
 static const struct ethtool_ops labrador_eth_ethtool_ops = {
     // .get_drvinfo    = labrador_eth_ethtool_getdrvinfo,
     // .get_msglevel    = labrador_eth_ethtool_getmsglevel,
@@ -239,16 +352,17 @@ static const struct ethtool_ops labrador_eth_ethtool_ops = {
 };
 
 static const struct net_device_ops labrador_netdev_ops = {
-    .ndo_open        = labrador_eth_open
-    // .ndo_stop        = labrador_eth_close,
-    // .ndo_start_xmit        = labrador_eth_hard_start_xmit,
+    .ndo_open        = labrador_eth_open,
+    .ndo_stop        = labrador_eth_close
+    // .ndo_start_xmit  = labrador_eth_hard_start_xmit,
     // .ndo_set_rx_mode    = labrador_eth_set_multicast_list,
     // .ndo_do_ioctl        = labrador_eth_ioctl,
     // .ndo_set_mac_address    = labrador_set_mac_address,
     // .ndo_validate_addr    = eth_validate_addr,
 };
 
-static int labrador_eth_drv_probe(struct platform_device *pdev)
+static int 
+labrador_eth_drv_probe(struct platform_device *pdev)
 {
     INFO_MSG("labrador_eth_drv_probe");
     struct resource *res;
@@ -322,11 +436,15 @@ static int labrador_eth_drv_probe(struct platform_device *pdev)
     // ndev->watchdog_timeo = msecs_to_jiffies(2500);
 
     //  Get size of DMA buffers/descriptors region 
-    // pldat->dma_buff_size = (TX_RING_SIZE + RX_RING_SIZE) * (ETH_PKG_MAX +
+    // pldat->dma_buff_size = (TX_RING_SIZE + RX_RING_SIZE) * (ENET_MAXF_SIZE +
     //     sizeof(struct txrx_desc_t) + sizeof(struct rx_status_t));
     // pldat->dma_buff_base_v = 0;
-
+    ////////////////////////////////////////////
+    ////////////////////////////////////////////
+    ////////////////////////////////////////////
+    ////////////////////////////////////////////
     free_irq(ndev->irq, ndev); // TIRAR ISSO!!!!
+    ////////////////////////////////////////////
     return 0;
     
 err_out_unregister_netdev:
@@ -352,14 +470,16 @@ err_exit:
     return ret;
 }
 
-static bool use_iram_for_net(struct device *dev)
+static bool 
+use_iram_for_net(struct device *dev)
 {
     if (dev && dev->of_node)
         return of_property_read_bool(dev->of_node, "use-iram");
     return false;
 }
 
-static int labrador_eth_drv_remove(struct platform_device *pdev)
+static int 
+labrador_eth_drv_remove(struct platform_device *pdev)
 {
     INFO_MSG("labrador_eth_drv_remove!");
     // struct net_device *ndev = platform_get_drvdata(pdev);
