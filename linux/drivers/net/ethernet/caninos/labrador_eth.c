@@ -201,8 +201,16 @@ static int
 labrador_eth_open(struct net_device *ndev)
 {
     INFO_MSG("labrador_eth_open!");
+    if(ndev == NULL) INFO_MSG("NULL NDEV!");
     struct netdata_local *pldat = netdev_priv(ndev);
     int ret;
+
+    if(pldat == NULL) INFO_MSG("NULL PLDAT!");
+    if(pldat->pdev == NULL) INFO_MSG("NULL PLDAT->pdev!");
+    if(&pldat->pdev->dev == NULL) INFO_MSG("NULL PLDAT->pdev->dev!");
+    if(ndev->phydev == NULL) INFO_MSG("NULL NDEV PHYDEV!");
+    if(&pldat->napi == NULL) INFO_MSG("NULL pldat->napi!");
+
 
     if (netif_msg_ifup(pldat))
         dev_dbg(&pldat->pdev->dev, "enabling %s\n", ndev->name);
@@ -343,7 +351,7 @@ out:
 /*
  * MAC support functions
  */
-static int labrador_set_mac_address(struct netdata_local *pldat, u8 *mac)
+static int __labrador_set_mac(struct netdata_local *pldat, u8 *mac)
 {
     u32 tmp;
 
@@ -354,6 +362,26 @@ static int labrador_set_mac_address(struct netdata_local *pldat, u8 *mac)
     writel(tmp, LABRADOR_MAC_CSR17(pldat->net_base));
 
     netdev_dbg(pldat->ndev, "Ethernet MAC address %pM\n", mac);
+    return 0;
+}
+
+static int labrador_set_mac_address(struct net_device *ndev, void *p)
+{
+    struct sockaddr *addr = p;
+    struct netdata_local *pldat = netdev_priv(ndev);
+    unsigned long flags;
+
+    if (!is_valid_ether_addr(addr->sa_data))
+        return -EADDRNOTAVAIL;
+    memcpy(ndev->dev_addr, addr->sa_data, ETH_ALEN);
+
+    spin_lock_irqsave(&pldat->lock, flags);
+
+    /* Set station address */
+    __labrador_set_mac(pldat, ndev->dev_addr);
+
+    spin_unlock_irqrestore(&pldat->lock, flags);
+
     return 0;
 }
 
@@ -443,7 +471,7 @@ static const struct net_device_ops labrador_netdev_ops = {
     .ndo_start_xmit  = labrador_eth_hard_start_xmit,
     //.ndo_set_rx_mode    = labrador_eth_set_multicast_list,
     // .ndo_do_ioctl        = labrador_eth_ioctl,
-    //.ndo_set_mac_address    = labrador_set_mac_address,
+    .ndo_set_mac_address    = labrador_set_mac_address
     // .ndo_validate_addr    = eth_validate_addr,
 };
 
@@ -454,6 +482,83 @@ static const struct net_device_ops labrador_netdev_ops = {
 //     writel(0, LPC_ENET_MAC1(pldat->net_base));
 //     writel(0, LPC_ENET_MAC2(pldat->net_base));
 // }
+
+// static void __labrador_handle_xmit(struct net_device *ndev)
+// {
+//     struct netdata_local *pldat = netdev_priv(ndev);
+//     u32 *ptxstat, txstat;
+
+//     txcidx = readl(LPC_ENET_TXCONSUMEINDEX(pldat->net_base));
+//     while (pldat->last_tx_idx != txcidx) {
+//         unsigned int skblen = pldat->skblen[pldat->last_tx_idx];
+
+//         /* A buffer is available, get buffer status */
+//         ptxstat = &pldat->tx_stat_v[pldat->last_tx_idx];
+//         txstat = *ptxstat;
+
+//         /* Next buffer and decrement used buffer counter */
+//         pldat->num_used_tx_buffs--;
+//         pldat->last_tx_idx++;
+//         if (pldat->last_tx_idx >= ENET_TX_DESC)
+//             pldat->last_tx_idx = 0;
+
+//         /* Update collision counter */
+//         ndev->stats.collisions += TXSTATUS_COLLISIONS_GET(txstat);
+
+//         /* Any errors occurred? */
+//         if (txstat & TXSTATUS_ERROR) {
+//             if (txstat & TXSTATUS_UNDERRUN) {
+//                  //FIFO underrun 
+//                 ndev->stats.tx_fifo_errors++;
+//             }
+//             if (txstat & TXSTATUS_LATECOLL) {
+//                 /* Late collision */
+//                 ndev->stats.tx_aborted_errors++;
+//             }
+//             if (txstat & TXSTATUS_EXCESSCOLL) {
+//                 /* Excessive collision */
+//                 ndev->stats.tx_aborted_errors++;
+//             }
+//             if (txstat & TXSTATUS_EXCESSDEFER) {
+//                 /* Defer limit */
+//                 ndev->stats.tx_aborted_errors++;
+//             }
+//             ndev->stats.tx_errors++;
+//         } else {
+//             /* Update stats */
+//             ndev->stats.tx_packets++;
+//             ndev->stats.tx_bytes += skblen;
+//         }
+
+//         txcidx = readl(LPC_ENET_TXCONSUMEINDEX(pldat->net_base));
+//     }
+
+//     if (pldat->num_used_tx_buffs <= ENET_TX_DESC/2) {
+//         if (netif_queue_stopped(ndev))
+//             netif_wake_queue(ndev);
+//     }
+// }
+
+static int labrador_eth_poll(struct napi_struct *napi, int budget)
+{
+    struct netdata_local *pldat = container_of(napi,
+            struct netdata_local, napi);
+    struct net_device *ndev = pldat->ndev;
+    int rx_done = 0;
+    struct netdev_queue *txq = netdev_get_tx_queue(ndev, 0);
+
+    __netif_tx_lock(txq, smp_processor_id());
+    __lpc_handle_xmit(ndev);
+    __netif_tx_unlock(txq);
+    rx_done = __lpc_handle_recv(ndev, budget);
+
+    if (rx_done < budget) {
+        napi_complete_done(napi, rx_done);
+        lpc_eth_enable_int(pldat->net_base);
+    }
+
+    return rx_done;
+}
 
 static int 
 labrador_eth_drv_probe(struct platform_device *pdev)
@@ -580,22 +685,22 @@ labrador_eth_drv_probe(struct platform_device *pdev)
     __labrador_eth_reset(pldat);
 
     //  then shut everything down to save power 
-    // __lpc_eth_shutdown(pldat);
+    // __labrador_eth_shutdown(pldat);
 
     /* Set default parameters */
     pldat->msg_enable = NETIF_MSG_LINK;
 
     //     /* Force an MII interface reset and clock setup */
-    // __lpc_mii_mngt_reset(pldat);
+    // ___mii_mngt_reset(pldat);
 
     //  Force default PHY interface setup in chip, this will probably be
     //    changed by the PHY driver 
-    // pldat->link = 0;
-    // pldat->speed = 100;
-    // pldat->duplex = DUPLEX_FULL;
-    // __lpc_params_setup(pldat);
+    pldat->link = 0;
+    pldat->speed = 100;
+    pldat->duplex = DUPLEX_FULL;
+    // __lpc_params_setup(pldat); ja fez
 
-    // netif_napi_add(ndev, &pldat->napi, lpc_eth_poll, NAPI_WEIGHT);
+    netif_napi_add(ndev, &pldat->napi, labrador_eth_poll, NAPI_WEIGHT);
 
     ret = register_netdev(ndev);
     if (ret) {
