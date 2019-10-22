@@ -1018,19 +1018,25 @@ labrador_eth_drv_probe(struct platform_device *pdev)
     if (ret)
         goto err_out_unregister_netdev;
 
-    ////////////////////////////////////////////
-    ////////////////////////////////////////////
-    ////////////////////////////////////////////
-    ////////////////////////////////////////////
-    free_irq(ndev->irq, ndev); // TIRAR ISSO!!!!
-    ////////////////////////////////////////////
+    netdev_info(ndev, "LABRADOR MAC at 0x%08x irq %d\n",
+           res->start, ndev->irq);
+
+    phydev = ndev->phydev;
+
+    device_init_wakeup(&pdev->dev, 1);
+    device_set_wakeup_enable(&pdev->dev, 0);
+
     return 0;
-    
+
 err_out_unregister_netdev:
     unregister_netdev(ndev);
 err_out_dma_unmap:
-//     if (!use_iram_for_net(&pldat->pdev->dev) ||
-//         pldat->dma_buff_size > lpc32xx_return_iram_size())
+    // if (!use_iram_for_net(&pldat->pdev->dev) ||
+    //     pldat->dma_buff_size > lpc32xx_return_iram_size())
+    //     dma_free_coherent(&pldat->pdev->dev, pldat->dma_buff_size,
+    //               pldat->dma_buff_base_v,
+    //               pldat->dma_buff_base_p);
+    if (!use_iram_for_net(&pldat->pdev->dev))
         dma_free_coherent(&pldat->pdev->dev, pldat->dma_buff_size,
                   pldat->dma_buff_base_v,
                   pldat->dma_buff_base_p);
