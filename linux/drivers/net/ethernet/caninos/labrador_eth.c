@@ -53,7 +53,112 @@
 
 #define ENET_MAXF_SIZE 1518
 
-#define EC_BMODE_SWR (0x1) // software reset
+/*
+ * Ethernet MAC controller Register offsets
+ */
+#define LAB_ENET_BUSMODE(x)             (x + 0x0000)
+#define LAB_ENET_TRANSMIT(x)            (x + 0x0008)
+#define LAB_ENET_RECEIVE(x)             (x + 0x0010)
+#define LAB_ENET_RXDESCRIPTOR(x)        (x + 0x0018)
+#define LAB_ENET_TXDESCRIPTOR(x)        (x + 0x0020)
+#define LAB_ENET_STATUS(x)              (x + 0x0028)
+#define LAB_ENET_OPMODE(x)              (x + 0x0030)
+#define LAB_ENET_INTENABLE(x)           (x + 0x0038)
+#define LAB_ENET_OVERFLOW(x)            (x + 0x0040)
+#define LAB_ENET_MII_MNGT(x)            (x + 0x0048)
+#define LAB_ENET_MII_SERIAL_MNGT(x)     (x + 0x0050)
+#define LAB_ENET_TIMER(x)               (x + 0x0058)
+#define LAB_ENET_MAC_LOW(x)             (x + 0x0080)
+#define LAB_ENET_MAC_HIGH(x)            (x + 0x0088)
+#define LAB_ENET_CACHE_CTRL(x)          (x + 0x0090)
+#define LAB_ENET_FIFO(x)                (x + 0x0098)
+#define LAB_ENET_FLOW_CTRL(x)           (x + 0x00A0)
+#define LAB_ENET_MAC_CTRL(x)            (x + 0x00B0)
+
+/*
+ * Bus Mode register definitions
+ */
+#define LAB_BUSMODE_RESET               (1 << 0)
+
+/*
+ * Transmit Poll register definitions
+ */
+#define LAB_TRANSMIT_ENABLE             (1 << 0)
+
+/*
+ * Receive Poll register definitions
+ */
+#define LAB_RECEIVE_ENABLE              (1 << 0)
+
+/*
+ * Status register definitions
+ */
+#define LAB_STATUS_TI_CLEAR             (1 << 0)
+#define LAB_STATUS_TPS_CLEAR            (1 << 1)
+#define LAB_STATUS_TU_CLEAR             (1 << 2)
+#define LAB_STATUS_UNF_CLEAR            (1 << 5)
+#define LAB_STATUS_RI_CLEAR             (1 << 6)
+#define LAB_STATUS_RU_CLEAR             (1 << 7)
+#define LAB_STATUS_RPS_CLEAR            (1 << 8)
+#define LAB_STATUS_ETI_CLEAR            (1 << 10)
+#define LAB_STATUS_GTE_CLEAR            (1 << 11)
+#define LAB_STATUS_ERI_CLEAR            (1 << 14)
+#define LAB_STATUS_AIS_CLEAR            (1 << 15)
+#define LAB_STATUS_NIS_CLEAR            (1 << 16)
+
+/*
+ * Operation Mode register definitions
+ */
+#define LAB_OPMODE_RX_START             (1 << 1)
+#define LAB_OPMODE_RX_STOP              (0 << 1)
+#define LAB_OPMODE_PB_ENABLE            (1 << 3)
+#define LAB_OPMODE_PB_DISABLE           (0 << 3)
+#define LAB_OPMODE_PR_ENABLE            (1 << 6)
+#define LAB_OPMODE_PR_DISABLE           (0 << 6)
+#define LAB_OPMODE_PM_ENABLE            (1 << 7)
+#define LAB_OPMODE_PM_DISABLE           (0 << 7)
+#define LAB_OPMODE_FULL_DUPLEX          (1 << 9)
+#define LAB_OPMODE_HALF_DUPLEX          (0 << 9)
+#define LAB_OPMODE_LPBK_NORMAL          (0 << 10)
+#define LAB_OPMODE_LPBK_INTERNAL        (1 << 10)
+#define LAB_OPMODE_TX_START             (1 << 13)
+#define LAB_OPMODE_TX_STOP              (0 << 13)
+#define LAB_OPMODE_SPEED_10M            (1 << 17)
+#define LAB_OPMODE_SPEED_100M           (0 << 17)
+#define LAB_OPMODE_SF_ENABLE            (1 << 21)
+#define LAB_OPMODE_SF_DISABLE           (0 << 21)
+#define LAB_OPMODE_TTM_10M              (1 << 22)
+#define LAB_OPMODE_TTM_100M             (0 << 22)
+#define LAB_OPMODE_RCV_ALL_ENABLE       (1 << 30)
+#define LAB_OPMODE_RCV_ALL_DISABLE      (0 << 30)
+
+/*
+ * MII Management and SROM register definitions
+ */
+#define LAB_MII_OPMODE_READ             (1 << 18)
+#define LAB_MII_OPMODE_WRITE            (0 << 18)
+
+/*
+ * MII Serial Management register definitions
+ */
+#define LAB_MII_SERIAL_START            (1 << 31)
+#define LAB_MII_SERIAL_BUSY             (1 << 31)
+#define LAB_MII_SERIAL_FREE             (0 << 31)
+#define LAB_MII_SERIAL_OPCODE_DISABLE   (0 << 26)
+#define LAB_MII_SERIAL_OPCODE_WRITE     (1 << 26)
+#define LAB_MII_SERIAL_OPCODE_READ      (2 << 26)
+#define LAB_MII_SERIAL_OPCODE_CLOCKSET  (3 << 26)
+
+/*
+ * MAC CTRL register definitions
+ */
+#define LAB_MAC_CTRL_RMII               (0 << 0)
+#define LAB_MAC_CTRL_SMII               (1 << 0)
+#define LAB_MAC_REF_CLK_NORMAL          (0 << 1)
+#define LAB_MAC_REF_CLK_INVERT          (1 << 1)
+#define LAB_MAC_REF_CLK_INTERNAL        (0 << 8)
+#define LAB_MAC_REF_CLK_EXTERNAL        (1 << 8)
+
 #define EC_CACHETHR_CPTL(x) (((x) & 0xFF) << 24) // cache pause threshold level
 #define EC_CACHETHR_CRTL(x) (((x) & 0xFF) << 16) // cache restart threshold level
 #define EC_CACHETHR_PQT(x)  ((x) & 0xFFFF) // flow control pause quanta time
@@ -70,19 +175,9 @@
 #define EC_TXPOLL_ST (0x1) // leave suspended mode to running mode to start xmit
 #define EC_RXPOLL_SR (0x1) // leave suspended to running mode
 
-#define LABRADOR_MAC_CTRL(x)  (x + 0x00B0)
-
-#define LABRADOR_MAC_CSR1(x)  (x + 0x0008)
-#define LABRADOR_INT_STATUS(x)  (x + 0x0028) //CSR5
-#define LABRADOR_MAC_CSR6(x)  (x + 0x0030)
-#define LABRADOR_INT_ENABLE(x)  (x + 0x0038) //CSR7
-#define LABRADOR_MAC_CSR10(x)  (x + 0x0050)
-#define LABRADOR_MAC_CSR11(x)  (x + 0x0058)
-#define LABRADOR_MAC_CSR16(x)  (x + 0x0080)
-#define LABRADOR_MAC_CSR17(x)  (x + 0x0088)
-#define LABRADOR_MAC_CSR18(x)  (x + 0x0090)
-#define LABRADOR_MAC_CSR19(x)  (x + 0x0098)
-#define LABRADOR_MAC_CSR20(x)  (x + 0x00A0)
+/*
+ * Ethernet MAC controller Register offsets
+ */
 
 #define TXBD_STAT_OWN (0x1 << 31)
 #define TXBD_CTRL_TBS1(x)  ((x) & 0x7FF) // buf1 size
@@ -98,12 +193,10 @@
 #define TXBD_CTRL_LS (0x1 << 30) // last descriptor
 #define TXBD_CTRL_FS (0x1 << 29) // first descriptor
 
-#define ETH_MAC_LEN 6
-
 #define INFO_MSG(fmt,...) pr_info(MODNAME ": " fmt, ##__VA_ARGS__)
 #define ERR_MSG(fmt,...) pr_err(MODNAME ": " fmt, ##__VA_ARGS__)
 
-static char default_mac_addr[ETH_MAC_LEN] = {0x00, 0x18, 0xFE, 0x61, 0xD5, 0xD6};
+static char default_mac_addr[6] = {0x00, 0x18, 0xFE, 0x61, 0xD5, 0xD6};
 
 
 /*
@@ -117,8 +210,6 @@ struct netdata_local {
     u32                     msg_enable;
     unsigned int            skblen[TX_RING_SIZE];
     unsigned int            last_tx_idx;
-    unsigned int            txidx; //TODO ??
-    unsigned int            ethernet_skb_cur;
     unsigned int            num_used_tx_buffs;
     struct mii_bus          *mii_bus;
     struct clk              *clk;
@@ -151,50 +242,57 @@ struct rx_status_t {
     __le32 statushashcrc;
 };
 
+static phy_interface_t 
+labrador_phy_interface_mode(struct device *dev)
+{
+    if (dev && dev->of_node) {
+        const char *mode = of_get_property(dev->of_node,
+                           "phy-mode", NULL);
+        if (mode && strcmp(mode, "smii") == 0)
+            return PHY_INTERFACE_MODE_SMII;
+    }
+    return PHY_INTERFACE_MODE_RMII;
+}
+
 static void 
 __labrador_eth_reset(struct netdata_local *pldat)
 {
     INFO_MSG("__labrador_eth_reset");
-    writel(readl(pldat->net_base) | EC_BMODE_SWR, pldat->net_base);
+    writel(readl(pldat->net_base) | LAB_BUSMODE_RESET, pldat->net_base);
     do {
         udelay(10);
-    } while (readl(pldat->net_base) & EC_BMODE_SWR);
+    } while (readl(pldat->net_base) & LAB_BUSMODE_RESET);
 }
 
 static void 
 labrador_eth_init(struct netdata_local *pldat)
 {
     INFO_MSG("labrador_eth_init");
-    // select clk input from external phy
-    writel(readl(LABRADOR_MAC_CTRL(pldat->net_base)) | (0x1 << 1), 
-        LABRADOR_MAC_CTRL(pldat->net_base));
-    writel(0, LABRADOR_MAC_CSR10(pldat->net_base));
-    writel(0xcc000000, LABRADOR_MAC_CSR10(pldat->net_base));
+
+    /******************** REFATORAR ESSA FUNÇÃO *****************************/
+    
+    /* ref_clk phase invert */
+    writel(readl(LAB_ENET_MAC_CTRL(pldat->net_base)) | LAB_MAC_REF_CLK_INVERT, 
+           LAB_ENET_MAC_CTRL(pldat->net_base));
+
+    __labrador_mii_mngt_reset(pldat);
     
     // set flow control mode and force transmiter to pause about 100ms
     writel(EC_CACHETHR_CPTL(0x0) | EC_CACHETHR_CRTL(0x0) | 
-               EC_CACHETHR_PQT(0x4FFF), LABRADOR_MAC_CSR18(pldat->net_base));
+               EC_CACHETHR_PQT(0x4FFF), LAB_ENET_CACHE_CTRL(pldat->net_base));
     writel(EC_FIFOTHR_FPTL(0x40) | EC_FIFOTHR_FRTL(0x10), 
-        LABRADOR_MAC_CSR19(pldat->net_base));
-    writel(EC_FLOWCTRL_ENALL, LABRADOR_MAC_CSR20(pldat->net_base));
-    
-    // always set to work as full duplex 
-    writel(readl(LABRADOR_MAC_CSR6(pldat->net_base)) | EC_OPMODE_FD, 
-    LABRADOR_MAC_CSR6(pldat->net_base)); //Full-duplex
-    writel(readl(LABRADOR_MAC_CSR6(pldat->net_base)) & ~EC_OPMODE_10M, 
-    LABRADOR_MAC_CSR6(pldat->net_base)); //100M
-    writel(readl(LABRADOR_MAC_CSR6(pldat->net_base)) & (~EC_OPMODE_PR), 
-        LABRADOR_MAC_CSR6(pldat->net_base));
+        LAB_ENET_FIFO_PAUSE(pldat->net_base));
+    writel(EC_FLOWCTRL_ENALL, LAB_ENET_FLOW_CTRL(pldat->net_base));
 
     //interrupt mitigation control register
     //NRP =7, RT =1, CS=0
-    writel(0x004e0000, LABRADOR_MAC_CSR11(pldat->net_base));
+    writel(0x004e0000, LAB_ENET_TIMER(pldat->net_base));
     
     // stop tx and rx and disable interrupts
-    writel(readl(LABRADOR_MAC_CSR6(pldat->net_base)) & 
+    writel(readl(LAB_ENET_OPMODE(pldat->net_base)) & 
         (~(EC_OPMODE_ST | EC_OPMODE_SR)), 
-        LABRADOR_MAC_CSR6(pldat->net_base));
-    writel(0, LABRADOR_INT_ENABLE(pldat->net_base));
+        LAB_ENET_OPMODE(pldat->net_base));
+    writel(0, LAB_ENET_INTENABLE(pldat->net_base));
 }
 
 static int 
@@ -239,7 +337,7 @@ static void
 labrador_eth_disable_int(void __iomem *regbase)
 {
     INFO_MSG("labrador_eth_disable_int!");
-    writel(0, LABRADOR_INT_ENABLE(regbase));
+    writel(0, LAB_ENET_INTENABLE(regbase));
 }
 
 static irqreturn_t 
@@ -252,9 +350,9 @@ __labrador_eth_interrupt(int irq, void *dev_id)
 
     spin_lock(&pldat->lock);
 
-    tmp = readl(LABRADOR_INT_STATUS(pldat->net_base));
+    tmp = readl(LAB_ENET_STATUS(pldat->net_base));
     /* Clear interrupts */
-    writel(tmp, LABRADOR_INT_STATUS(pldat->net_base));
+    writel(tmp, LAB_ENET_STATUS(pldat->net_base));
     
     labrador_eth_disable_int(pldat->net_base);
     if (likely(napi_schedule_prep(&pldat->napi)))
@@ -330,7 +428,7 @@ labrador_eth_hard_start_xmit(struct sk_buff *skb, struct net_device *ndev)
     pldat -> tx_desc_v -> status = TXBD_STAT_OWN;
     mb();
     
-    writel(EC_TXPOLL_ST, LABRADOR_MAC_CSR1(pldat->net_base));
+    writel(EC_TXPOLL_ST, LAB_ENET_TRANSMIT(pldat->net_base));
 
     pldat->skblen[pldat->txidx] = skb->len;
 
@@ -357,9 +455,9 @@ static int __labrador_set_mac(struct netdata_local *pldat, u8 *mac)
 
     /* Set station address */
     tmp = mac[0] | ((u32)mac[1] << 8) | ((u32)mac[2] << 16);
-    writel(tmp, LABRADOR_MAC_CSR16(pldat->net_base));
+    writel(tmp, LAB_ENET_MAC_LOW_1(pldat->net_base));
     tmp = mac[3] | ((u32)mac[4] << 8) | ((u32)mac[5] << 16);
-    writel(tmp, LABRADOR_MAC_CSR17(pldat->net_base));
+    writel(tmp, LAB_ENET_MAC_HIGH(pldat->net_base));
 
     netdev_dbg(pldat->ndev, "Ethernet MAC address %pM\n", mac);
     return 0;
@@ -539,6 +637,213 @@ static const struct net_device_ops labrador_netdev_ops = {
 //     }
 // }
 
+static void 
+__labrador_params_setup(struct netdata_local *pldat)
+{
+    u32 tmp;
+
+    tmp = readl(LAB_ENET_OPMODE(pldat->net_base));
+    /* puts tx/rx processes in stopped states */
+    writel(LAB_OPMODE_TX_STOP | LAB_OPMODE_RX_STOP | tmp, LABRADOR_ENET_OPMODE(pldat));
+
+    if (pldat->duplex == DUPLEX_FULL) 
+        tmp |= LAB_OPMODE_FULL_DUPLEX;
+    else 
+        tmp |= LAB_OPMODE_FULL_DUPLEX;
+
+    if (pldat->speed == SPEED_100)
+        tmp |= LAB_OPMODE_SPEED_100M;
+    else
+        tmp |= LAB_OPMODE_SPEED_10M;
+
+    /* puts tx/rx processes in running states */
+    writel(LAB_OPMODE_TX_START | LAB_OPMODE_RX_START | tmp, LABRADOR_ENET_OPMODE(pldat));
+}
+
+/*
+ * MAC<--->PHY support functions
+ */
+static int 
+labrador_mdio_read(struct mii_bus *bus, int phy_id, int phyreg)
+{
+    struct netdata_local *pldat = bus->priv;
+    unsigned long timeout = jiffies + msecs_to_jiffies(100);
+    int lps;
+
+    /* devo colocar isso embaixo do check de busy? */
+    writel(((phy_id << 21) | (phyreg << 16)), LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
+
+    /* Wait for unbusy status */
+    while (readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base)) & LAB_MII_SERIAL_BUSY) {
+        if (time_after(jiffies, timeout))
+            return -EIO;
+        cpu_relax();
+    }
+
+    writel(LAB_MII_SERIAL_START | LAB_MII_SERIAL_OPCODE_READ, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
+
+    /* aguardar novamente o busy? */
+
+    lps = readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
+    /* estamos sobre-escrevendo o clock divider settings aqui? */
+    writel(0, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
+
+    return lps;
+}
+
+static int lpc_mdio_write(struct mii_bus *bus, int phy_id, int phyreg,
+            u16 phydata)
+{
+    struct netdata_local *pldat = bus->priv;
+    unsigned long timeout = jiffies + msecs_to_jiffies(100);
+
+    writel(((phy_id << 21) | (phyreg << 16)), LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
+    writel(phydata, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
+
+    /* Wait for completion */
+    while (readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base)) & LAB_MII_SERIAL_BUSY) {
+        if (time_after(jiffies, timeout))
+            return -EIO;
+        cpu_relax();
+    }
+
+    return 0;
+}
+
+static int 
+__labrador_mii_mngt_reset(struct netdata_local *pldat)
+{
+    /* pode estar errado */
+    writel(0, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
+    writel(0xcc000000, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
+
+    return 0;
+}
+
+static int 
+labrador_mdio_reset(struct mii_bus *bus)
+{
+    return __labrador_mii_mngt_reset((struct netdata_local *)bus->priv);
+}
+
+static void 
+labrador_handle_link_change(struct net_device *ndev)
+{
+    struct netdata_local *pldat = netdev_priv(ndev);
+    struct phy_device *phydev = ndev->phydev;
+    unsigned long flags;
+
+    bool status_change = false;
+
+    spin_lock_irqsave(&pldat->lock, flags);
+
+    if (phydev->link) {
+        if ((pldat->speed != phydev->speed) ||
+            (pldat->duplex != phydev->duplex)) {
+            pldat->speed = phydev->speed;
+            pldat->duplex = phydev->duplex;
+            status_change = true;
+        }
+    }
+
+    if (phydev->link != pldat->link) {
+        if (!phydev->link) {
+            pldat->speed = 0;
+            pldat->duplex = -1;
+        }
+        pldat->link = phydev->link;
+
+        status_change = true;
+    }
+
+    spin_unlock_irqrestore(&pldat->lock, flags);
+
+    if (status_change)
+        __labrador_params_setup(pldat);
+}
+
+static int 
+labrador_mii_probe(struct net_device *ndev)
+{
+    struct netdata_local *pldat = netdev_priv(ndev);
+    struct phy_device *phydev = phy_find_first(pldat->mii_bus);
+
+    if (!phydev) {
+        netdev_err(ndev, "no PHY found\n");
+        return -ENODEV;
+    }
+
+    /* Attach to the PHY */
+    if (labrador_phy_interface_mode(&pldat->pdev->dev) == PHY_INTERFACE_MODE_SMII)
+        netdev_info(ndev, "using SMII interface\n");
+    else
+        netdev_info(ndev, "using RMII interface\n");
+    phydev = phy_connect(ndev, phydev_name(phydev),
+                 &labrador_handle_link_change,
+                 labrador_phy_interface_mode(&pldat->pdev->dev));
+
+    if (IS_ERR(phydev)) {
+        netdev_err(ndev, "Could not attach to PHY\n");
+        return PTR_ERR(phydev);
+    }
+
+    /* mask with MAC supported features */
+    phydev->supported &= PHY_BASIC_FEATURES;
+
+    phydev->advertising = phydev->supported;
+
+    pldat->link = 0;
+    pldat->speed = 0;
+    pldat->duplex = -1;
+
+    phy_attached_info(phydev);
+
+    return 0;
+}
+
+static int 
+labrador_mii_init(struct netdata_local *pldat)
+{
+    int err = -ENXIO;
+
+    pldat->mii_bus = mdiobus_alloc();
+    if (!pldat->mii_bus) {
+        err = -ENOMEM;
+        goto err_out;
+    }
+
+    /* Setup MII mode */
+    if (labrador_phy_interface_mode(&pldat->pdev->dev) == PHY_INTERFACE_MODE_SMII)
+        writel(LAB_MAC_CTRL_SMII, LAB_ENET_MAC_CTRL(pldat->net_base));
+    else 
+        writel(LAB_MAC_CTRL_RMII, LAB_ENET_MAC_CTRL(pldat->net_base));
+
+    pldat->mii_bus->name = "lab_mii_bus";
+    pldat->mii_bus->read = &labrador_mdio_read;
+    pldat->mii_bus->write = &labrador_mdio_write;
+    pldat->mii_bus->reset = &labrador_mdio_reset;
+    snprintf(pldat->mii_bus->id, MII_BUS_ID_SIZE, "%s-%x",
+             pldat->pdev->name, pldat->pdev->id);
+    pldat->mii_bus->priv = pldat;
+    pldat->mii_bus->parent = &pldat->pdev->dev;
+
+    platform_set_drvdata(pldat->pdev, pldat->mii_bus);
+
+    if (mdiobus_register(pldat->mii_bus))
+        goto err_out_unregister_bus;
+
+    if (labrador_mii_probe(pldat->ndev) != 0)
+        goto err_out_unregister_bus;
+
+    return 0;
+
+err_out_unregister_bus:
+    mdiobus_unregister(pldat->mii_bus);
+    mdiobus_free(pldat->mii_bus);
+err_out:
+    return err;
+}
+
 static int labrador_eth_poll(struct napi_struct *napi, int budget)
 {
     struct netdata_local *pldat = container_of(napi,
@@ -548,13 +853,13 @@ static int labrador_eth_poll(struct napi_struct *napi, int budget)
     struct netdev_queue *txq = netdev_get_tx_queue(ndev, 0);
 
     __netif_tx_lock(txq, smp_processor_id());
-    __lpc_handle_xmit(ndev);
+    __labrador_handle_xmit(ndev);
     __netif_tx_unlock(txq);
-    rx_done = __lpc_handle_recv(ndev, budget);
+    rx_done = __labrador_handle_recv(ndev, budget);
 
     if (rx_done < budget) {
         napi_complete_done(napi, rx_done);
-        lpc_eth_enable_int(pldat->net_base);
+        labrador_eth_enable_int(pldat->net_base);
     }
 
     return rx_done;
@@ -690,15 +995,15 @@ labrador_eth_drv_probe(struct platform_device *pdev)
     /* Set default parameters */
     pldat->msg_enable = NETIF_MSG_LINK;
 
-    //     /* Force an MII interface reset and clock setup */
-    // ___mii_mngt_reset(pldat);
+    /* Force an MII interface reset and clock setup */
+    __labrador_mii_mngt_reset(pldat);
 
     //  Force default PHY interface setup in chip, this will probably be
     //    changed by the PHY driver 
     pldat->link = 0;
     pldat->speed = 100;
     pldat->duplex = DUPLEX_FULL;
-    // __lpc_params_setup(pldat); ja fez
+    __labrador_params_setup(pldat);
 
     netif_napi_add(ndev, &pldat->napi, labrador_eth_poll, NAPI_WEIGHT);
 
@@ -708,6 +1013,10 @@ labrador_eth_drv_probe(struct platform_device *pdev)
         goto err_out_dma_unmap;
     }
     platform_set_drvdata(pdev, ndev);
+
+    ret = labrador_mii_init(pldat);
+    if (ret)
+        goto err_out_unregister_netdev;
 
     ////////////////////////////////////////////
     ////////////////////////////////////////////
