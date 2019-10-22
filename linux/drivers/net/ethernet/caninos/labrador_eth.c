@@ -133,6 +133,22 @@
 #define LAB_OPMODE_RCV_ALL_DISABLE      (0 << 30)
 
 /*
+ * Interrupt enable register definitions
+ */
+#define LAB_INTENABLE_TIE               (1 << 0)
+#define LAB_INTENABLE_TSE               (1 << 1)
+#define LAB_INTENABLE_TUE               (1 << 2)
+#define LAB_INTENABLE_UNF               (1 << 5)
+#define LAB_INTENABLE_RIE               (1 << 6)
+#define LAB_INTENABLE_RUE               (1 << 7)
+#define LAB_INTENABLE_RSE               (1 << 8)
+#define LAB_INTENABLE_ETE               (1 << 10)
+#define LAB_INTENABLE_GTE               (1 << 11)
+#define LAB_INTENABLE_ERE               (1 << 14)
+#define LAB_INTENABLE_AIE               (1 << 15)
+#define LAB_INTENABLE_NIE               (1 << 16)
+
+/*
  * MII Management and SROM register definitions
  */
 #define LAB_MII_OPMODE_READ             (1 << 18)
@@ -262,6 +278,13 @@ __labrador_eth_reset(struct netdata_local *pldat)
     do {
         udelay(10);
     } while (readl(pldat->net_base) & LAB_BUSMODE_RESET);
+}
+
+static void 
+lpc_eth_enable_int(void __iomem *regbase)
+{
+    writel(LAB_INTENABLE_TIE | LAB_INTENABLE_RIE | LAB_INTENABLE_NIE,
+           LAB_ENET_INTENABLE(regbase));
 }
 
 static void 
