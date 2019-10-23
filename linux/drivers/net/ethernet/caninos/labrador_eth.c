@@ -52,6 +52,7 @@
 #define TX_RING_SIZE 128 
 
 #define ENET_MAXF_SIZE 1518
+#define NAPI_WEIGHT 16
 
 /*
  * Ethernet MAC controller Register offsets
@@ -258,6 +259,23 @@ struct rx_status_t {
     __le32 statushashcrc;
 };
 
+static int 
+__labrador_mii_mngt_reset(struct netdata_local *pldat)
+{
+    /* pode estar errado */
+    writel(0, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
+    writel(0xcc000000, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
+
+    return 0;
+}
+
+static int 
+labrador_mdio_reset(struct mii_bus *bus)
+{
+    return __labrador_mii_mngt_reset((struct netdata_local *)bus->priv);
+}
+
+
 static phy_interface_t 
 labrador_phy_interface_mode(struct device *dev)
 {
@@ -281,7 +299,7 @@ __labrador_eth_reset(struct netdata_local *pldat)
 }
 
 static void 
-lpc_eth_enable_int(void __iomem *regbase)
+labrador_eth_enable_int(void __iomem *regbase)
 {
     writel(LAB_INTENABLE_TIE | LAB_INTENABLE_RIE | LAB_INTENABLE_NIE,
            LAB_ENET_INTENABLE(regbase));
@@ -304,7 +322,7 @@ labrador_eth_init(struct netdata_local *pldat)
     writel(EC_CACHETHR_CPTL(0x0) | EC_CACHETHR_CRTL(0x0) | 
                EC_CACHETHR_PQT(0x4FFF), LAB_ENET_CACHE_CTRL(pldat->net_base));
     writel(EC_FIFOTHR_FPTL(0x40) | EC_FIFOTHR_FRTL(0x10), 
-        LAB_ENET_FIFO_PAUSE(pldat->net_base));
+        LAB_ENET_FIFO(pldat->net_base));
     writel(EC_FLOWCTRL_ENALL, LAB_ENET_FLOW_CTRL(pldat->net_base));
 
     //interrupt mitigation control register
@@ -419,6 +437,7 @@ labrador_eth_hard_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 {
     struct netdata_local *pldat = netdev_priv(ndev);
     u32 *ptxstat;
+    u32 txidx;
     struct txrx_desc_t *ptxrxdesc;
     dma_addr_t dma_addr;
 
@@ -433,13 +452,16 @@ labrador_eth_hard_start_xmit(struct sk_buff *skb, struct net_device *ndev)
         return NETDEV_TX_BUSY;
     }
 
+    /* Get the next TX descriptor index */
+    txidx = readl(LAB_ENET_TXDESCRIPTOR(pldat->net_base));
+
     if (skb -> len > ENET_MAXF_SIZE) {
         ERR_MSG("Invalid TX length\n");
         goto out;
     }
 
     /* Copy data to the DMA buffer */
-    memcpy(pldat->tx_buff_v + pldat->txidx * ENET_MAXF_SIZE, skb->data, skb->len);
+    memcpy(pldat->tx_buff_v + txidx * ENET_MAXF_SIZE, skb->data, skb->len);
 
     pldat -> tx_desc_v -> buf_addr = (u32) dma_addr;
     pldat -> tx_desc_v -> status = 0;
@@ -453,7 +475,7 @@ labrador_eth_hard_start_xmit(struct sk_buff *skb, struct net_device *ndev)
     
     writel(EC_TXPOLL_ST, LAB_ENET_TRANSMIT(pldat->net_base));
 
-    pldat->skblen[pldat->txidx] = skb->len;
+    pldat->skblen[txidx] = skb->len;
 
     /* Save the buffer and increment the buffer counter */
     pldat->num_used_tx_buffs++;
@@ -478,7 +500,7 @@ static int __labrador_set_mac(struct netdata_local *pldat, u8 *mac)
 
     /* Set station address */
     tmp = mac[0] | ((u32)mac[1] << 8) | ((u32)mac[2] << 16);
-    writel(tmp, LAB_ENET_MAC_LOW_1(pldat->net_base));
+    writel(tmp, LAB_ENET_MAC_LOW(pldat->net_base));
     tmp = mac[3] | ((u32)mac[4] << 8) | ((u32)mac[5] << 16);
     writel(tmp, LAB_ENET_MAC_HIGH(pldat->net_base));
 
@@ -667,7 +689,7 @@ __labrador_params_setup(struct netdata_local *pldat)
 
     tmp = readl(LAB_ENET_OPMODE(pldat->net_base));
     /* puts tx/rx processes in stopped states */
-    writel(LAB_OPMODE_TX_STOP | LAB_OPMODE_RX_STOP | tmp, LABRADOR_ENET_OPMODE(pldat));
+    writel(LAB_OPMODE_TX_STOP | LAB_OPMODE_RX_STOP | tmp, LAB_ENET_OPMODE(pldat));
 
     if (pldat->duplex == DUPLEX_FULL) 
         tmp |= LAB_OPMODE_FULL_DUPLEX;
@@ -680,7 +702,7 @@ __labrador_params_setup(struct netdata_local *pldat)
         tmp |= LAB_OPMODE_SPEED_10M;
 
     /* puts tx/rx processes in running states */
-    writel(LAB_OPMODE_TX_START | LAB_OPMODE_RX_START | tmp, LABRADOR_ENET_OPMODE(pldat));
+    writel(LAB_OPMODE_TX_START | LAB_OPMODE_RX_START | tmp, LAB_ENET_OPMODE(pldat));
 }
 
 /*
@@ -714,7 +736,7 @@ labrador_mdio_read(struct mii_bus *bus, int phy_id, int phyreg)
     return lps;
 }
 
-static int lpc_mdio_write(struct mii_bus *bus, int phy_id, int phyreg,
+static int labrador_mdio_write(struct mii_bus *bus, int phy_id, int phyreg,
             u16 phydata)
 {
     struct netdata_local *pldat = bus->priv;
@@ -731,22 +753,6 @@ static int lpc_mdio_write(struct mii_bus *bus, int phy_id, int phyreg,
     }
 
     return 0;
-}
-
-static int 
-__labrador_mii_mngt_reset(struct netdata_local *pldat)
-{
-    /* pode estar errado */
-    writel(0, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
-    writel(0xcc000000, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
-
-    return 0;
-}
-
-static int 
-labrador_mdio_reset(struct mii_bus *bus)
-{
-    return __labrador_mii_mngt_reset((struct netdata_local *)bus->priv);
 }
 
 static void 
@@ -876,9 +882,9 @@ static int labrador_eth_poll(struct napi_struct *napi, int budget)
     struct netdev_queue *txq = netdev_get_tx_queue(ndev, 0);
 
     __netif_tx_lock(txq, smp_processor_id());
-    __labrador_handle_xmit(ndev);
+    // __labrador_handle_xmit(ndev);
     __netif_tx_unlock(txq);
-    rx_done = __labrador_handle_recv(ndev, budget);
+    // rx_done = __labrador_handle_recv(ndev, budget);
 
     if (rx_done < budget) {
         napi_complete_done(napi, rx_done);
@@ -886,6 +892,14 @@ static int labrador_eth_poll(struct napi_struct *napi, int budget)
     }
 
     return rx_done;
+}
+
+static bool 
+use_iram_for_net(struct device *dev)
+{
+    if (dev && dev->of_node)
+        return of_property_read_bool(dev->of_node, "use-iram");
+    return false;
 }
 
 static int 
@@ -1076,14 +1090,6 @@ err_out_free_dev:
 err_exit:
     pr_err("%s: not found (%d).\n", MODNAME, ret);
     return ret;
-}
-
-static bool 
-use_iram_for_net(struct device *dev)
-{
-    if (dev && dev->of_node)
-        return of_property_read_bool(dev->of_node, "use-iram");
-    return false;
 }
 
 static int 
