@@ -649,9 +649,9 @@ static int __labrador_set_mac(struct netdata_local *pldat, u8 *mac)
     u32 tmp;
 
     /* Set station address */
-    tmp = mac[0] | ((u32)mac[1] << 8) | ((u32)mac[2] << 16);
+    tmp = mac[0] | ((u32)mac[1] << 8) | ((u32)mac[2] << 16 | ((u32)mac[3] << 24);
     writel(tmp, LAB_ENET_MAC_LOW(pldat->net_base));
-    tmp = mac[3] | ((u32)mac[4] << 8) | ((u32)mac[5] << 16);
+    tmp = mac[4] | ((u32)mac[5] << 8);
     writel(tmp, LAB_ENET_MAC_HIGH(pldat->net_base));
 
     netdev_dbg(pldat->ndev, "Ethernet MAC address %pM\n", mac);
@@ -680,25 +680,18 @@ static int labrador_set_mac_address(struct net_device *ndev, void *p)
 
 static void __labrador_get_mac(struct netdata_local *pldat, u8 *mac)
 {
-    // u32 tmp;
+    u32 tmp;
 
-    // /* Get station address */
-    // tmp = readl(LPC_ENET_SA2(pldat->net_base));
-    // mac[0] = tmp & 0xFF;
-    // mac[1] = tmp >> 8;
-    // tmp = readl(LPC_ENET_SA1(pldat->net_base));
-    // mac[2] = tmp & 0xFF;
-    // mac[3] = tmp >> 8;
-    // tmp = readl(LPC_ENET_SA0(pldat->net_base));
+    /* Get station address */
+    tmp = readl(LAB_ENET_MAC_LOW(pldat->net_base));
+    mac[0] = tmp;
+    mac[1] = tmp >> 8;
+    mac[2] = tmp >> 16;
+    mac[3] = tmp >> 24;
+    tmp = readl(LAB_ENET_MAC_HIGH(pldat->net_base));
     // mac[4] = tmp & 0xFF;
-    // mac[5] = tmp >> 8;
-
-    mac[0] = default_mac_addr[0];
-    mac[1] = default_mac_addr[1];
-    mac[2] = default_mac_addr[2];
-    mac[3] = default_mac_addr[3];
-    mac[4] = default_mac_addr[4];
-    mac[5] = default_mac_addr[5];
+    mac[4] = tmp;
+    mac[5] = tmp >> 8;
 }
 
 
