@@ -48,10 +48,10 @@
 #define MODNAME "labrador-eth"
 #define DRV_VERSION "1.00"
 
-#define RX_RING_SIZE 64
-#define TX_RING_SIZE 128 
-
+#define ENET_RX_DESC 64
+#define ENET_TX_DESC 128 
 #define ENET_MAXF_SIZE 1518
+
 #define NAPI_WEIGHT 16
 
 /*
@@ -167,6 +167,24 @@
 #define LAB_MII_SERIAL_OPCODE_CLOCKSET  (3 << 26)
 
 /*
+ * Pause time & Cache Threshold register definitions
+ */
+#define LAB_CACHE_CTRL_CPTL(x)          (((x) & 0xFF) << 24)
+#define LAB_CACHE_CTRL_CRTL(x)          (((x) & 0xFF) << 16)
+#define LAB_CACHE_CTRL_PQT(x)           ((x) & 0xFFFF)
+
+/*
+ * FIFO threshold register definitions
+ */
+#define LAB_FIFO_FPTL(x)                (((x) & 0xFFFF) << 16) 
+#define LAB_FIFO_FRTL(x)                ((x) & 0xFFFF)
+
+/*
+ * Flow control setup & status register definitions
+ */
+#define LAB_FLOW_CTRL_BPE               (1 << 27)
+
+/*
  * MAC CTRL register definitions
  */
 #define LAB_MAC_CTRL_RMII               (0 << 0)
@@ -176,111 +194,48 @@
 #define LAB_MAC_REF_CLK_INTERNAL        (0 << 8)
 #define LAB_MAC_REF_CLK_EXTERNAL        (1 << 8)
 
-/* Receive Status information word */
-#define RXSTATUS_SIZE           0x000007FF
-#define RXSTATUS_CONTROL        (1 << 18)
-#define RXSTATUS_VLAN           (1 << 19)
-#define RXSTATUS_FILTER         (1 << 20)
-#define RXSTATUS_MULTICAST      (1 << 21)
-#define RXSTATUS_BROADCAST      (1 << 22)
-#define RXSTATUS_CRC            (1 << 23)
-#define RXSTATUS_SYMBOL         (1 << 24)
-#define RXSTATUS_LENGTH         (1 << 25)
-#define RXSTATUS_RANGE          (1 << 26)
-#define RXSTATUS_ALIGN          (1 << 27)
-#define RXSTATUS_OVERRUN        (1 << 28)
-#define RXSTATUS_NODESC         (1 << 29)
-#define RXSTATUS_LAST           (1 << 30)
-#define RXSTATUS_ERROR          (1 << 31)
-
-#define RXSTATUS_STATUS_ERROR \
-    (RXSTATUS_NODESC | RXSTATUS_OVERRUN | RXSTATUS_ALIGN | \
-     RXSTATUS_RANGE | RXSTATUS_LENGTH | RXSTATUS_SYMBOL | RXSTATUS_CRC)
-
-/* Receive Descriptor control word */
-#define RXDESC_CONTROL_SIZE     0x000007FF
-#define RXDESC_CONTROL_INT      (1 << 31)
-
-/* Transmit Status information word */
-#define TXSTATUS_COLLISIONS_GET(x)  (((x) >> 21) & 0xF)
-#define TXSTATUS_DEFER          (1 << 25)
-#define TXSTATUS_EXCESSDEFER        (1 << 26)
-#define TXSTATUS_EXCESSCOLL     (1 << 27)
-#define TXSTATUS_LATECOLL       (1 << 28)
-#define TXSTATUS_UNDERRUN       (1 << 29)
-#define TXSTATUS_NODESC         (1 << 30)
-#define TXSTATUS_ERROR          (1 << 31)
-
-/* Transmit Descriptor control word */
-#define TXDESC_CONTROL_SIZE     0x000007FF
-#define TXDESC_CONTROL_OVERRIDE     (1 << 26)
-#define TXDESC_CONTROL_HUGE     (1 << 27)
-#define TXDESC_CONTROL_PAD      (1 << 28)
-#define TXDESC_CONTROL_CRC      (1 << 29)
-#define TXDESC_CONTROL_LAST     (1 << 30)
-#define TXDESC_CONTROL_INT      (1 << 31)
-
-#define EC_CACHETHR_CPTL(x) (((x) & 0xFF) << 24) // cache pause threshold level
-#define EC_CACHETHR_CRTL(x) (((x) & 0xFF) << 16) // cache restart threshold level
-#define EC_CACHETHR_PQT(x)  ((x) & 0xFFFF) // flow control pause quanta time
-#define EC_FIFOTHR_FPTL(x) (((x) & 0xFFFF) << 16) // fifo pause threshold level
-#define EC_FIFOTHR_FRTL(x) ((x) & 0xFFFF) // fifo restart threshold level
-#define EC_FLOWCTRL_ENALL (0x1F << 27)
-#define EC_OPMODE_FD  (0x1 << 9) // full duplex mode
-#define EC_OPMODE_SPEED(x) (((x) & 0x3) << 16) // eth speed selection
-#define EC_OPMODE_PR (0x1 << 6) // promiscuous mode
-#define EC_OPMODE_ST (0x1 << 13) // start or stop transmit command
-#define EC_OPMODE_SR (0x1 << 1) // start or stop receive command
-#define EC_OPMODE_10M (0x1 << 17) // set when work on 10M, otherwise 100M
-#define EC_IEN_ALL (0x1CDE3) // TU interrupt disabled
-#define EC_TXPOLL_ST (0x1) // leave suspended mode to running mode to start xmit
-#define EC_RXPOLL_SR (0x1) // leave suspended to running mode
+/*
+ * TX Descriptor definitions
+ */
+#define TX_DESC_STAT_OWN                (1 << 31)
+#define TX_DESC_STAT_ES                 (1 << 15)      
+#define TX_DESC_STAT_LO                 (1 << 11)      
+#define TX_DESC_STAT_NC                 (1 << 10)
+#define TX_DESC_STAT_LC                 (1 << 9)
+#define TX_DESC_STAT_EC                 (1 << 8)  
+#define TX_DESC_STAT_CC(x)              (((x) >> 3) & 0xF)
+#define TX_DESC_STAT_UF                 (1 << 1)        
+#define TX_DESC_STAT_DE                 (1 << 0)         
+#define TX_DESC_CTRL_IC                 (1 << 31)
+#define TX_DESC_CTRL_LS                 (1 << 30) 
+#define TX_DESC_CTRL_FS                 (1 << 29)
+#define TX_DESC_CTRL_SET                (1 << 27)
+#define TX_DESC_CTRL_TER                (1 << 25)   
+#define TX_DESC_CTRL_TBS1(x)            ((x) & 0x7FF)
 
 /*
- * Ethernet MAC controller Register offsets
+ * RX Descriptor definitions
  */
-
-#define TXBD_STAT_OWN (0x1 << 31)
-#define TXBD_CTRL_TBS1(x)  ((x) & 0x7FF) // buf1 size
-#define TXBD_STAT_CC(x)  (((x) >> 3) & 0xF)
-#define TXBD_STAT_ES  (0x1 << 15)       // error summary
-#define TXBD_STAT_LO  (0x1 << 11)       // loss of carrier
-#define TXBD_STAT_NC  (0x1 << 10)       // no carrier
-#define TXBD_STAT_LC  (0x1 << 9)        // late collision
-#define TXBD_STAT_EC  (0x1 << 8)        // excessive collision
-#define TXBD_STAT_UF  (0x1 << 1)        // underflow error
-#define TXBD_STAT_DE  (0x1)         // deferred
-
-#define RXBD_STAT_OWN (0x1 << 31)
-#define RXBD_STAT_FF  (0x1 << 30)       //filtering fail
-#define RXBD_STAT_FL(x) (((x) >> 16) & 0x3FFF)  // frame leng
-#define RXBD_STAT_ES  (0x1 << 15)       // error summary
-#define RXBD_STAT_DE  (0x1 << 14)       // descriptor error
-#define RXBD_STAT_RF  (0x1 << 11)       // runt frame
-#define RXBD_STAT_MF  (0x1 << 10)       // multicast frame
-#define RXBD_STAT_FS  (0x1 << 9)        // first descriptor
-#define RXBD_STAT_LS  (0x1 << 8)        // last descriptor
-#define RXBD_STAT_TL  (0x1 << 7)        // frame too long
-#define RXBD_STAT_CS  (0x1 << 6)        // collision
-#define RXBD_STAT_FT  (0x1 << 5)        // frame type
-#define RXBD_STAT_RE  (0x1 << 3)        // mii error
-#define RXBD_STAT_DB  (0x1 << 2)        // byte not aligned
-#define RXBD_STAT_CE  (0x1 << 1)        // crc error
-
-#define RXBD_CTRL_RBS1(x) ((x) & 0x7FF) // buffer1 size
-#define RXBD_CTRL_RER (0x1 << 25) // receive end of ring
-
-#define TXBD_CTRL_IC (0x1 << 31) // interrupt on completion
-#define TXBD_CTRL_TER (0x1 << 25) // transmit end of ring
-#define TXBD_CTRL_SET (0x1 << 27) // setup packet
-
-#define TXBD_CTRL_LS (0x1 << 30) // last descriptor
-#define TXBD_CTRL_FS (0x1 << 29) // first descriptor
+#define RX_DESC_STAT_OWN                (1 << 31)
+#define RX_DESC_STAT_FF                 (1 << 30)       
+#define RX_DESC_STAT_FL(x)              (((x) >> 16) & 0x3FFF)  
+#define RX_DESC_STAT_ES                 (1 << 15)       
+#define RX_DESC_STAT_DE                 (1 << 14)       
+#define RX_DESC_STAT_RF                 (1 << 11)       
+#define RX_DESC_STAT_MF                 (1 << 10)       
+#define RX_DESC_STAT_FS                 (1 << 9)        
+#define RX_DESC_STAT_LS                 (1 << 8)        
+#define RX_DESC_STAT_TL                 (1 << 7)        
+#define RX_DESC_STAT_CS                 (1 << 6)        
+#define RX_DESC_STAT_FT                 (1 << 5)        
+#define RX_DESC_STAT_RE                 (1 << 3)        
+#define RX_DESC_STAT_DB                 (1 << 2)        
+#define RX_DESC_STAT_CE                 (1 << 1)        
+#define RX_DESC_CTRL_RER                (1 << 25) 
+#define RX_DESC_CTRL_RBS1(x)            ((x) & 0x7FF) 
 
 #define INFO_MSG(fmt,...) pr_info(MODNAME ": " fmt, ##__VA_ARGS__)
 #define ERR_MSG(fmt,...) pr_err(MODNAME ": " fmt, ##__VA_ARGS__)
-
-static char default_mac_addr[6] = {0x00, 0x18, 0xFE, 0x61, 0xD5, 0xD6};
 
 
 /*
@@ -292,7 +247,7 @@ struct netdata_local {
     spinlock_t              lock;
     void __iomem            *net_base;
     u32                     msg_enable;
-    unsigned int            skblen[TX_RING_SIZE];
+    unsigned int            skblen[ENET_TX_DESC];
     unsigned int            last_tx_idx;
     unsigned int            txidx;
     unsigned int            num_used_tx_buffs;
@@ -414,21 +369,21 @@ __labrador_txrx_desc_setup(struct netdata_local *pldat)
 
     /* Setup TX descriptors, status, and buffers */
     pldat->tx_desc_v = tbuff;
-    tbuff += sizeof(struct txrx_desc_t) * TX_RING_SIZE;
+    tbuff += sizeof(struct txrx_desc_t) * ENET_TX_DESC;
 
     pldat->tx_buff_v = tbuff;
-    tbuff += ENET_MAXF_SIZE * TX_RING_SIZE;
+    tbuff += ENET_MAXF_SIZE * ENET_TX_DESC;
 
     tbuff = PTR_ALIGN(tbuff, 16);
     /* Setup RX descriptors, status, and buffers */
     pldat->rx_desc_v = tbuff;
-    tbuff += sizeof(struct txrx_desc_t) * RX_RING_SIZE;
+    tbuff += sizeof(struct txrx_desc_t) * ENET_RX_DESC;
 
     pldat->rx_buff_v = tbuff;
-    tbuff += ENET_MAXF_SIZE * RX_RING_SIZE;
+    tbuff += ENET_MAXF_SIZE * ENET_RX_DESC;
 
     /* Map the TX descriptors to the TX buffers in hardware */
-    for (i = 0; i < TX_RING_SIZE; i++) {
+    for (i = 0; i < ENET_TX_DESC; i++) {
         ptxrxdesc = &pldat->tx_desc_v[i];
         ptxrxdesc->status = 0;
         ptxrxdesc->control = 0;
@@ -438,7 +393,7 @@ __labrador_txrx_desc_setup(struct netdata_local *pldat)
     }
 
     /* Map the RX descriptors to the RX buffers in hardware */
-    for (i = 0; i < RX_RING_SIZE; i++) {
+    for (i = 0; i < ENET_RX_DESC; i++) {
         ptxrxdesc = &pldat->rx_desc_v[i];
         ptxrxdesc->status = 0;
         ptxrxdesc->control = 0;
@@ -471,12 +426,12 @@ labrador_eth_init(struct netdata_local *pldat)
     /* Setup TX and RX descriptors */
     __labrador_txrx_desc_setup(pldat);
     
-    // set flow control mode and force transmiter to pause about 100ms
-    writel(EC_CACHETHR_CPTL(0x0) | EC_CACHETHR_CRTL(0x0) | 
-               EC_CACHETHR_PQT(0x4FFF), LAB_ENET_CACHE_CTRL(pldat->net_base));
-    writel(EC_FIFOTHR_FPTL(0x40) | EC_FIFOTHR_FRTL(0x10), 
+    /* set flow control mode and force transmiter to pause about 100ms */
+    writel(LAB_CACHE_CTRL_CPTL(0x0) | LAB_CACHE_CTRL_CRTL(0x0) | 
+               LAB_CACHE_CTRL_PQT(0x4FFF), LAB_ENET_CACHE_CTRL(pldat->net_base));
+    writel(LAB_FIFO_FPTL(0x40) | LAB_FIFO_FRTL(0x10), 
         LAB_ENET_FIFO(pldat->net_base));
-    writel(EC_FLOWCTRL_ENALL, LAB_ENET_FLOW_CTRL(pldat->net_base));
+    writel(LAB_FLOW_CTRL_BPE, LAB_ENET_FLOW_CTRL(pldat->net_base));
 
     __labrador_params_setup(pldat);
 
@@ -506,9 +461,9 @@ labrador_eth_init(struct netdata_local *pldat)
 static int 
 labrador_eth_open(struct net_device *ndev)
 {
-    INFO_MSG("labrador_eth_open!");
     struct netdata_local *pldat = netdev_priv(ndev);
     int ret;
+    INFO_MSG("labrador_eth_open!");
 
     if (netif_msg_ifup(pldat))
         dev_dbg(&pldat->pdev->dev, "enabling %s\n", ndev->name);
@@ -543,10 +498,10 @@ labrador_eth_disable_int(void __iomem *regbase)
 static irqreturn_t 
 __labrador_eth_interrupt(int irq, void *dev_id)
 {
-    INFO_MSG("labrador_eth_drv_interrupt");
     struct net_device *ndev = dev_id;
     struct netdata_local *pldat = netdev_priv(ndev);
     u32 tmp;
+    INFO_MSG("labrador_eth_drv_interrupt");
 
     spin_lock(&pldat->lock);
 
@@ -566,9 +521,9 @@ __labrador_eth_interrupt(int irq, void *dev_id)
 static int 
 labrador_eth_close(struct net_device *ndev)
 {
-    INFO_MSG("labrador_eth_close");
     unsigned long flags;
     struct netdata_local *pldat = netdev_priv(ndev);
+    INFO_MSG("labrador_eth_close");
 
     if (netif_msg_ifdown(pldat))
         dev_dbg(&pldat->pdev->dev, "shutting down %s\n", ndev->name);
@@ -598,7 +553,7 @@ labrador_eth_hard_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 
     spin_lock_irq(&pldat->lock);
 
-    if (pldat->num_used_tx_buffs >= (TX_RING_SIZE - 1)) {
+    if (pldat->num_used_tx_buffs >= (ENET_TX_DESC - 1)) {
         /* This function should never be called when there are no
            buffers */
         netif_stop_queue(ndev);
@@ -609,10 +564,10 @@ labrador_eth_hard_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 
     /* Setup control for the transfer */
     ptxrxdesc = &pldat->tx_desc_v[pldat->txidx];
-    ptxrxdesc->control = TXBD_CTRL_TBS1(skb->len);
-    ptxrxdesc->control |= TXBD_CTRL_FS | TXBD_CTRL_LS | TXBD_CTRL_IC;
+    ptxrxdesc->control = TX_DESC_CTRL_TBS1(skb->len);
+    ptxrxdesc->control |= TX_DESC_CTRL_FS | TX_DESC_CTRL_LS | TX_DESC_CTRL_IC;
     mb();
-    ptxrxdesc->status = TXBD_STAT_OWN;
+    ptxrxdesc->status = TX_DESC_STAT_OWN;
 
     /* Copy data to the DMA buffer */
     memcpy(pldat->tx_buff_v + pldat->txidx * ENET_MAXF_SIZE, skb->data, skb->len);
@@ -622,16 +577,16 @@ labrador_eth_hard_start_xmit(struct sk_buff *skb, struct net_device *ndev)
     pldat->num_used_tx_buffs++;
     
     pldat->txidx++;
-    if (pldat->txidx >= TX_RING_SIZE) {
+    if (pldat->txidx >= ENET_TX_DESC) {
         pldat->txidx = 0;
-        ptxrxdesc->control |= TXBD_CTRL_TER;
+        ptxrxdesc->control |= TX_DESC_CTRL_TER;
     }
 
     /* Start transmit */
     writel(LAB_TRANSMIT_ENABLE, LAB_ENET_TRANSMIT(pldat->net_base));
 
     /* Stop queue if no more TX buffers */
-    if (pldat->num_used_tx_buffs >= (TX_RING_SIZE - 1))
+    if (pldat->num_used_tx_buffs >= (ENET_TX_DESC - 1))
         netif_stop_queue(ndev);
 
 out:    
@@ -649,7 +604,7 @@ static int __labrador_set_mac(struct netdata_local *pldat, u8 *mac)
     u32 tmp;
 
     /* Set station address */
-    tmp = mac[0] | ((u32)mac[1] << 8) | ((u32)mac[2] << 16 | ((u32)mac[3] << 24);
+    tmp = mac[0] | ((u32)mac[1] << 8) | ((u32)mac[2] << 16) | ((u32)mac[3] << 24);
     writel(tmp, LAB_ENET_MAC_LOW(pldat->net_base));
     tmp = mac[4] | ((u32)mac[5] << 8);
     writel(tmp, LAB_ENET_MAC_HIGH(pldat->net_base));
@@ -694,54 +649,6 @@ static void __labrador_get_mac(struct netdata_local *pldat, u8 *mac)
     mac[5] = tmp >> 8;
 }
 
-
-// static void labrador_eth_set_multicast_list(struct net_device *ndev)
-// {
-//     struct netdata_local *pldat = netdev_priv(ndev);
-//     struct netdev_hw_addr_list *mcptr = &ndev->mc;
-//     struct netdev_hw_addr *ha;
-//     u32 tmp32, hash_val, hashlo, hashhi;
-//     unsigned long flags;
-
-//     spin_lock_irqsave(&pldat->lock, flags);
-
-//     /* Set station address */
-//     labrador_set_mac_address(pldat, ndev->dev_addr);
-
-//     tmp32 =  LPC_RXFLTRW_ACCEPTUBROADCAST | LPC_RXFLTRW_ACCEPTPERFECT;
-
-//     if (ndev->flags & IFF_PROMISC)
-//         tmp32 |= LPC_RXFLTRW_ACCEPTUNICAST |
-//             LPC_RXFLTRW_ACCEPTUMULTICAST;
-//     if (ndev->flags & IFF_ALLMULTI)
-//         tmp32 |= LPC_RXFLTRW_ACCEPTUMULTICAST;
-
-//     if (netdev_hw_addr_list_count(mcptr))
-//         tmp32 |= LPC_RXFLTRW_ACCEPTUMULTICASTHASH;
-
-//     writel(tmp32, LPC_ENET_RXFILTER_CTRL(pldat->net_base));
-
-
-//     /* Set initial hash table */
-//     hashlo = 0x0;
-//     hashhi = 0x0;
-
-//     /* 64 bits : multicast address in hash table */
-//     netdev_hw_addr_list_for_each(ha, mcptr) {
-//         hash_val = (ether_crc(6, ha->addr) >> 23) & 0x3F;
-
-//         if (hash_val >= 32)
-//             hashhi |= 1 << (hash_val - 32);
-//         else
-//             hashlo |= 1 << hash_val;
-//     }
-
-//     writel(hashlo, LPC_ENET_HASHFILTERL(pldat->net_base));
-//     writel(hashhi, LPC_ENET_HASHFILTERH(pldat->net_base));
-
-//     spin_unlock_irqrestore(&pldat->lock, flags);
-// }
-
 static const struct ethtool_ops labrador_eth_ethtool_ops = {
     // .get_drvinfo    = labrador_eth_ethtool_getdrvinfo,
     // .get_msglevel    = labrador_eth_ethtool_getmsglevel,
@@ -785,27 +692,27 @@ __labrador_handle_xmit(struct net_device *ndev)
         /* Next buffer and decrement used buffer counter */
         pldat->num_used_tx_buffs--;
         pldat->last_tx_idx++;
-        if (pldat->last_tx_idx >= TX_RING_SIZE)
+        if (pldat->last_tx_idx >= ENET_TX_DESC)
             pldat->last_tx_idx = 0;
 
         /* Update collision counter */
-        ndev->stats.collisions += TXBD_STAT_CC(txstat);
+        ndev->stats.collisions += TX_DESC_STAT_CC(txstat);
 
         /* Any errors occurred? */
-        if (txstat & TXBD_CTRL_LS & TXBD_STAT_ES) {
-            if (txstat & TXBD_STAT_UF) {
+        if (txstat & TX_DESC_CTRL_LS & TX_DESC_STAT_ES) {
+            if (txstat & TX_DESC_STAT_UF) {
                 /* FIFO underrun */
                 ndev->stats.tx_fifo_errors++;
             }
-            if (txstat & TXBD_STAT_LC) {
+            if (txstat & TX_DESC_STAT_LC) {
                 /* Late collision */
                 ndev->stats.tx_aborted_errors++;
             }
-            if (txstat & TXBD_STAT_EC) {
+            if (txstat & TX_DESC_STAT_EC) {
                 /* Excessive collision */
                 ndev->stats.tx_aborted_errors++;
             }
-            if (txstat & TXBD_STAT_DE) {
+            if (txstat & TX_DESC_STAT_DE) {
                 /* Defer limit */
                 ndev->stats.tx_aborted_errors++;
             }
@@ -817,7 +724,7 @@ __labrador_handle_xmit(struct net_device *ndev)
         }
     }
 
-    if (pldat->num_used_tx_buffs <= TX_RING_SIZE/2) {
+    if (pldat->num_used_tx_buffs <= ENET_TX_DESC/2) {
         if (netif_queue_stopped(ndev))
             netif_wake_queue(ndev);
     }
@@ -1001,19 +908,19 @@ static int __labrador_handle_recv(struct net_device *ndev, int budget)
     while (rx_done < budget) {
         /* Get pointer to receive status */
         rxstat = pldat->rx_desc_v[pldat->rxidx].status;
-        len = RXBD_STAT_FL(rxstat);
+        len = RX_DESC_STAT_FL(rxstat);
 
-        if (rxstat & RXBD_STAT_ES) {
-            if (rxstat & RXBD_STAT_DE) {
+        if (rxstat & RX_DESC_STAT_ES) {
+            if (rxstat & RX_DESC_STAT_DE) {
                 /* Overrun error */
                 ndev->stats.rx_fifo_errors++;
-            } else if (rxstat & RXBD_STAT_CE) {
+            } else if (rxstat & RX_DESC_STAT_CE) {
                 /* CRC error */
                 ndev->stats.rx_crc_errors++;
-            } else if (rxstat & RXBD_STAT_TL) {
+            } else if (rxstat & RX_DESC_STAT_TL) {
                 /* Length error */
                 ndev->stats.rx_length_errors++;
-            } else if (rxstat & (RXBD_STAT_CS | RXBD_STAT_RF)) {
+            } else if (rxstat & (RX_DESC_STAT_CS | RX_DESC_STAT_RF)) {
                 /* Collision error */
                 ndev->stats.collisions++;
             }
@@ -1039,7 +946,7 @@ static int __labrador_handle_recv(struct net_device *ndev, int budget)
 
         /* Increment consume index */
         pldat->rxidx++;
-        if (pldat->rxidx >= RX_RING_SIZE)
+        if (pldat->rxidx >= ENET_RX_DESC)
             pldat->rxidx = 0;
         rx_done++;
     }
@@ -1078,14 +985,13 @@ use_iram_for_net(struct device *dev)
 static int 
 labrador_eth_drv_probe(struct platform_device *pdev)
 {
-    INFO_MSG("labrador_eth_drv_probe");
     struct resource *res;
     struct net_device *ndev;
     struct netdata_local *pldat;
     struct phy_device *phydev;
     dma_addr_t dma_handle;
     int irq, ret;
-    u32 tmp;
+    INFO_MSG("labrador_eth_drv_probe");
 
 
     /* Get platform resources */
@@ -1150,7 +1056,7 @@ labrador_eth_drv_probe(struct platform_device *pdev)
     ndev->watchdog_timeo = msecs_to_jiffies(2500);
 
     /* Get size of DMA buffers/descriptors region */
-    pldat->dma_buff_size = (TX_RING_SIZE + RX_RING_SIZE) * (ENET_MAXF_SIZE +
+    pldat->dma_buff_size = (ENET_TX_DESC + ENET_RX_DESC) * (ENET_MAXF_SIZE +
         sizeof(struct txrx_desc_t));
     pldat->dma_buff_base_v = 0;
 
@@ -1268,9 +1174,9 @@ err_exit:
 static int 
 labrador_eth_drv_remove(struct platform_device *pdev)
 {
-    INFO_MSG("labrador_eth_drv_remove!");
     struct net_device *ndev = platform_get_drvdata(pdev);
     struct netdata_local *pldat = netdev_priv(ndev);
+    INFO_MSG("labrador_eth_drv_remove!");
 
     if (ndev == NULL) INFO_MSG("ndev NULL");
     if (pldat == NULL) INFO_MSG("pldat NULL");
