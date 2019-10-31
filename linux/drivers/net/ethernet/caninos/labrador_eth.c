@@ -649,13 +649,39 @@ static void __labrador_get_mac(struct netdata_local *pldat, u8 *mac)
     mac[5] = tmp >> 8;
 }
 
+/*
+ * Ethtool ops
+ */
+static void labrador_eth_ethtool_getdrvinfo(struct net_device *ndev,
+    struct ethtool_drvinfo *info)
+{
+    strlcpy(info->driver, MODNAME, sizeof(info->driver));
+    strlcpy(info->version, DRV_VERSION, sizeof(info->version));
+    strlcpy(info->bus_info, dev_name(ndev->dev.parent),
+        sizeof(info->bus_info));
+}
+
+static u32 labrador_eth_ethtool_getmsglevel(struct net_device *ndev)
+{
+    struct netdata_local *pldat = netdev_priv(ndev);
+
+    return pldat->msg_enable;
+}
+
+static void labrador_eth_ethtool_setmsglevel(struct net_device *ndev, u32 level)
+{
+    struct netdata_local *pldat = netdev_priv(ndev);
+
+    pldat->msg_enable = level;
+}
+
 static const struct ethtool_ops labrador_eth_ethtool_ops = {
-    // .get_drvinfo    = labrador_eth_ethtool_getdrvinfo,
-    // .get_msglevel    = labrador_eth_ethtool_getmsglevel,
-    // .set_msglevel    = labrador_eth_ethtool_setmsglevel,
-    // .get_link    = ethtool_op_get_link,
-    // .get_link_ksettings = phy_ethtool_get_link_ksettings,
-    // .set_link_ksettings = phy_ethtool_set_link_ksettings,
+    .get_drvinfo    = labrador_eth_ethtool_getdrvinfo,
+    .get_msglevel    = labrador_eth_ethtool_getmsglevel,
+    .set_msglevel    = labrador_eth_ethtool_setmsglevel,
+    .get_link    = ethtool_op_get_link,
+    .get_link_ksettings = phy_ethtool_get_link_ksettings,
+    .set_link_ksettings = phy_ethtool_set_link_ksettings,
 };
 
 static const struct net_device_ops labrador_netdev_ops = {
@@ -881,7 +907,7 @@ labrador_mii_init(struct netdata_local *pldat)
     pldat->mii_bus->priv = pldat;
     pldat->mii_bus->parent = &pldat->pdev->dev;
 
-    platform_set_drvdata(pldat->pdev, pldat->mii_bus);
+    // platform_set_drvdata(pldat->pdev, pldat->mii_bus);
 
     if (mdiobus_register(pldat->mii_bus))
         goto err_out_unregister_bus;
@@ -991,8 +1017,8 @@ labrador_eth_drv_probe(struct platform_device *pdev)
     struct phy_device *phydev;
     dma_addr_t dma_handle;
     int irq, ret;
+    u32 tmp;
     INFO_MSG("labrador_eth_drv_probe");
-
 
     /* Get platform resources */
     res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -1042,7 +1068,8 @@ labrador_eth_drv_probe(struct platform_device *pdev)
         ret = -ENOMEM;
         goto err_out_disable_clocks;
     }
-    ret = request_irq(ndev->irq, __labrador_eth_interrupt, IRQF_TRIGGER_HIGH, ndev->name, ndev);
+    ret = request_irq(ndev->irq, __labrador_eth_interrupt, IRQF_TRIGGER_HIGH, 
+                      ndev->name, ndev);
     if (ret) {
         dev_err(&pdev->dev, "error requesting interrupt.\n");
         goto err_out_iounmap;
@@ -1050,9 +1077,9 @@ labrador_eth_drv_probe(struct platform_device *pdev)
 
 
 
-    // /* Setup driver functions */
+    /* Setup driver functions */
     ndev->netdev_ops = &labrador_netdev_ops;
-    // ndev->ethtool_ops = &labrador_eth_ethtool_ops;
+    ndev->ethtool_ops = &labrador_eth_ethtool_ops;
     ndev->watchdog_timeo = msecs_to_jiffies(2500);
 
     /* Get size of DMA buffers/descriptors region */
