@@ -244,6 +244,7 @@
 struct netdata_local {
     struct platform_device  *pdev;
     struct net_device       *ndev;
+    char                    batata[16];
     spinlock_t              lock;
     void __iomem            *net_base;
     u32                     msg_enable;
@@ -280,6 +281,7 @@ struct txrx_desc_t {
 static inline phys_addr_t 
 __va_to_pa(void *addr, struct netdata_local *pldat)
 {
+    INFO_MSG("__va_to_pa");
     phys_addr_t phaddr;
 
     phaddr = addr - pldat->dma_buff_base_v;
@@ -291,6 +293,8 @@ __va_to_pa(void *addr, struct netdata_local *pldat)
 static void 
 __labrador_params_setup(struct netdata_local *pldat)
 {
+    INFO_MSG("__labrador_params_setup");
+
     u32 tmp;
 
     tmp = readl(LAB_ENET_OPMODE(pldat->net_base));
@@ -314,6 +318,7 @@ __labrador_params_setup(struct netdata_local *pldat)
 static int 
 __labrador_mii_mngt_reset(struct netdata_local *pldat)
 {
+    INFO_MSG("__labrador_mii_mngt_reset");
     /* pode estar errado */
     writel(0, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
     writel(0xcc000000, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
@@ -324,6 +329,8 @@ __labrador_mii_mngt_reset(struct netdata_local *pldat)
 static int 
 labrador_mdio_reset(struct mii_bus *bus)
 {
+    INFO_MSG("labrador_mdio_reset");
+
     return __labrador_mii_mngt_reset((struct netdata_local *)bus->priv);
 }
 
@@ -331,6 +338,8 @@ labrador_mdio_reset(struct mii_bus *bus)
 static phy_interface_t 
 labrador_phy_interface_mode(struct device *dev)
 {
+    INFO_MSG("labrador_phy_interface_mode");
+
     if (dev && dev->of_node) {
         const char *mode = of_get_property(dev->of_node,
                            "phy-mode", NULL);
@@ -353,6 +362,8 @@ __labrador_eth_reset(struct netdata_local *pldat)
 static void 
 labrador_eth_enable_int(void __iomem *regbase)
 {
+    INFO_MSG("labrador_eth_enable_int");
+
     writel(LAB_INTENABLE_TIE | LAB_INTENABLE_RIE | LAB_INTENABLE_NIE,
            LAB_ENET_INTENABLE(regbase));
 }
@@ -361,6 +372,8 @@ labrador_eth_enable_int(void __iomem *regbase)
 static void 
 __labrador_txrx_desc_setup(struct netdata_local *pldat)
 {
+    INFO_MSG("__labrador_txrx_desc_setup");
+
     void *tbuff;
     int i;
     struct txrx_desc_t *ptxrxdesc;
@@ -521,6 +534,8 @@ __labrador_eth_interrupt(int irq, void *dev_id)
 static int 
 labrador_eth_close(struct net_device *ndev)
 {
+    INFO_MSG("labrador_eth_close");
+
     unsigned long flags;
     struct netdata_local *pldat = netdev_priv(ndev);
     INFO_MSG("labrador_eth_close");
@@ -548,6 +563,8 @@ labrador_eth_close(struct net_device *ndev)
 static int 
 labrador_eth_hard_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 {
+    INFO_MSG("labrador_eth_hard_start_xmit");
+
     struct netdata_local *pldat = netdev_priv(ndev);
     struct txrx_desc_t *ptxrxdesc;
 
@@ -601,6 +618,8 @@ out:
  */
 static int __labrador_set_mac(struct netdata_local *pldat, u8 *mac)
 {
+    INFO_MSG("__labrador_set_mac");
+
     u32 tmp;
 
     /* Set station address */
@@ -615,6 +634,8 @@ static int __labrador_set_mac(struct netdata_local *pldat, u8 *mac)
 
 static int labrador_set_mac_address(struct net_device *ndev, void *p)
 {
+    INFO_MSG("labrador_set_mac_address");
+
     struct sockaddr *addr = p;
     struct netdata_local *pldat = netdev_priv(ndev);
     unsigned long flags;
@@ -635,6 +656,8 @@ static int labrador_set_mac_address(struct net_device *ndev, void *p)
 
 static void __labrador_get_mac(struct netdata_local *pldat, u8 *mac)
 {
+    INFO_MSG("__labrador_get_mac");
+
     u32 tmp;
 
     /* Get station address */
@@ -671,6 +694,9 @@ static const struct net_device_ops labrador_netdev_ops = {
 static void 
 __labrador_eth_shutdown(struct netdata_local *pldat)
 {
+    INFO_MSG("__labrador_eth_shutdown");
+
+
     /* Reset ethernet and power down PHY */
     __labrador_eth_reset(pldat);
     // writel(0, LPC_ENET_MAC1(pldat->net_base));
@@ -680,6 +706,8 @@ __labrador_eth_shutdown(struct netdata_local *pldat)
 static void 
 __labrador_handle_xmit(struct net_device *ndev)
 {
+    INFO_MSG("__labrador_handle_xmit");
+
     struct netdata_local *pldat = netdev_priv(ndev);
     u32 txstat;
 
@@ -736,6 +764,8 @@ __labrador_handle_xmit(struct net_device *ndev)
 static int 
 labrador_mdio_read(struct mii_bus *bus, int phy_id, int phyreg)
 {
+    INFO_MSG("labrador_mdio_read");
+
     struct netdata_local *pldat = bus->priv;
     unsigned long timeout = jiffies + msecs_to_jiffies(100);
     int lps;
@@ -764,6 +794,8 @@ labrador_mdio_read(struct mii_bus *bus, int phy_id, int phyreg)
 static int labrador_mdio_write(struct mii_bus *bus, int phy_id, int phyreg,
             u16 phydata)
 {
+    INFO_MSG("labrador_mdio_write");
+
     struct netdata_local *pldat = bus->priv;
     unsigned long timeout = jiffies + msecs_to_jiffies(100);
 
@@ -783,6 +815,8 @@ static int labrador_mdio_write(struct mii_bus *bus, int phy_id, int phyreg,
 static void 
 labrador_handle_link_change(struct net_device *ndev)
 {
+    INFO_MSG("labrador_handle_link_change");
+
     struct netdata_local *pldat = netdev_priv(ndev);
     struct phy_device *phydev = ndev->phydev;
     unsigned long flags;
@@ -819,6 +853,8 @@ labrador_handle_link_change(struct net_device *ndev)
 static int 
 labrador_mii_probe(struct net_device *ndev)
 {
+    INFO_MSG("labrador_mii_probe");
+
     struct netdata_local *pldat = netdev_priv(ndev);
     struct phy_device *phydev = phy_find_first(pldat->mii_bus);
 
@@ -858,6 +894,8 @@ labrador_mii_probe(struct net_device *ndev)
 static int 
 labrador_mii_init(struct netdata_local *pldat)
 {
+    INFO_MSG("labrador_mii_init");
+
     int err = -ENXIO;
 
     pldat->mii_bus = mdiobus_alloc();
@@ -881,7 +919,7 @@ labrador_mii_init(struct netdata_local *pldat)
     pldat->mii_bus->priv = pldat;
     pldat->mii_bus->parent = &pldat->pdev->dev;
 
-    platform_set_drvdata(pldat->pdev, pldat->mii_bus);
+    // platform_set_drvdata(pldat->pdev, pldat->mii_bus);
 
     if (mdiobus_register(pldat->mii_bus))
         goto err_out_unregister_bus;
@@ -900,6 +938,8 @@ err_out:
 
 static int __labrador_handle_recv(struct net_device *ndev, int budget)
 {
+    INFO_MSG("__labrador_handle_recv");
+
     struct netdata_local *pldat = netdev_priv(ndev);
     struct sk_buff *skb;
     u32 len, rxstat;
@@ -956,6 +996,8 @@ static int __labrador_handle_recv(struct net_device *ndev, int budget)
 
 static int labrador_eth_poll(struct napi_struct *napi, int budget)
 {
+    INFO_MSG("labrador_eth_poll");
+
     struct netdata_local *pldat = container_of(napi, struct netdata_local, napi);
     struct net_device *ndev = pldat->ndev;
     int rx_done = 0;
@@ -977,6 +1019,7 @@ static int labrador_eth_poll(struct napi_struct *napi, int budget)
 static bool 
 use_iram_for_net(struct device *dev)
 {
+    INFO_MSG("use_iram_for_net");
     if (dev && dev->of_node)
         return of_property_read_bool(dev->of_node, "use-iram");
     return false;
@@ -1129,8 +1172,8 @@ labrador_eth_drv_probe(struct platform_device *pdev)
         goto err_out_dma_unmap;
     }
     platform_set_drvdata(pdev, ndev);
-
     ret = labrador_mii_init(pldat);
+
     if (ret)
         goto err_out_unregister_netdev;
 
@@ -1140,7 +1183,19 @@ labrador_eth_drv_probe(struct platform_device *pdev)
     phydev = ndev->phydev;
 
     device_init_wakeup(&pdev->dev, 1);
+
     device_set_wakeup_enable(&pdev->dev, 0);
+
+
+    strcpy(pldat->batata, "batatinha");
+
+    INFO_MSG("fim do probe %s %s - estado reg_state %i - %s",pldat->batata, ndev->name, ndev->reg_state, netdev_reg_state(ndev));
+    INFO_MSG("pdev name: %s", pdev->name);
+    INFO_MSG("pdev addr: %p", pdev);
+    INFO_MSG("ndev addr: %p", ndev);
+    struct net_device * ndev2 = platform_get_drvdata(pdev);
+    INFO_MSG("ndev2 addr: %p", platform_get_drvdata(pdev));
+    INFO_MSG("reg_state de %s:  %i - %s", ndev2->name, ndev2->reg_state, netdev_reg_state(ndev2));
 
     return 0;
 
@@ -1177,6 +1232,12 @@ labrador_eth_drv_remove(struct platform_device *pdev)
     struct net_device *ndev = platform_get_drvdata(pdev);
     struct netdata_local *pldat = netdev_priv(ndev);
     INFO_MSG("labrador_eth_drv_remove!");
+    INFO_MSG("Nossa batata esta: %s", pldat->batata);
+    INFO_MSG("pdev name: %p", pdev->name);
+    INFO_MSG("pdev addr: %p", pdev);
+    INFO_MSG("ndev addr: %p", ndev);
+    INFO_MSG("reg_state de %s:  %i - %s", ndev->name, ndev->reg_state, netdev_reg_state(ndev));
+    INFO_MSG("estado reg_state: %i",ndev->reg_state);
 
     if (ndev == NULL) INFO_MSG("ndev NULL");
     if (pldat == NULL) INFO_MSG("pldat NULL");
