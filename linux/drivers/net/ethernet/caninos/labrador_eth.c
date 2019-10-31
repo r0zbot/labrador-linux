@@ -244,7 +244,6 @@
 struct netdata_local {
     struct platform_device  *pdev;
     struct net_device       *ndev;
-    char                    batata[16];
     spinlock_t              lock;
     void __iomem            *net_base;
     u32                     msg_enable;
@@ -1210,19 +1209,9 @@ labrador_eth_drv_probe(struct platform_device *pdev)
     phydev = ndev->phydev;
 
     device_init_wakeup(&pdev->dev, 1);
-
     device_set_wakeup_enable(&pdev->dev, 0);
 
-
-    strcpy(pldat->batata, "batatinha");
-
-    INFO_MSG("fim do probe %s %s - estado reg_state %i - %s",pldat->batata, ndev->name, ndev->reg_state, netdev_reg_state(ndev));
-    INFO_MSG("pdev name: %s", pdev->name);
-    INFO_MSG("pdev addr: %p", pdev);
-    INFO_MSG("ndev addr: %p", ndev);
-    struct net_device * ndev2 = platform_get_drvdata(pdev);
-    INFO_MSG("ndev2 addr: %p", platform_get_drvdata(pdev));
-    INFO_MSG("reg_state de %s:  %i - %s", ndev2->name, ndev2->reg_state, netdev_reg_state(ndev2));
+    INFO_MSG("fim do probe");
 
     return 0;
 
@@ -1259,15 +1248,6 @@ labrador_eth_drv_remove(struct platform_device *pdev)
     struct net_device *ndev = platform_get_drvdata(pdev);
     struct netdata_local *pldat = netdev_priv(ndev);
     INFO_MSG("labrador_eth_drv_remove!");
-    INFO_MSG("Nossa batata esta: %s", pldat->batata);
-    INFO_MSG("pdev name: %p", pdev->name);
-    INFO_MSG("pdev addr: %p", pdev);
-    INFO_MSG("ndev addr: %p", ndev);
-    INFO_MSG("reg_state de %s:  %i - %s", ndev->name, ndev->reg_state, netdev_reg_state(ndev));
-    INFO_MSG("estado reg_state: %i",ndev->reg_state);
-
-    if (ndev == NULL) INFO_MSG("ndev NULL");
-    if (pldat == NULL) INFO_MSG("pldat NULL");
 
     unregister_netdev(ndev);
 
@@ -1275,15 +1255,12 @@ labrador_eth_drv_remove(struct platform_device *pdev)
         dma_free_coherent(&pldat->pdev->dev, pldat->dma_buff_size,
                   pldat->dma_buff_base_v,
                   pldat->dma_buff_base_p);
-    INFO_MSG("free_irq");
     free_irq(ndev->irq, ndev);
-    INFO_MSG("iounmap");
     iounmap(pldat->net_base);
     mdiobus_unregister(pldat->mii_bus);
     mdiobus_free(pldat->mii_bus);
     clk_disable_unprepare(pldat->clk);
     clk_put(pldat->clk);
-    INFO_MSG("free_netdev");
     free_netdev(ndev);
 
     return 0;
