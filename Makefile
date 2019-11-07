@@ -23,10 +23,17 @@ kernel:
 	$(Q)cp $(CURDIR)/build/arch/arm/boot/uImage $(CURDIR)/output/
 	$(Q)cp $(CURDIR)/build/arch/arm/boot/dts/caninos_labrador.dtb $(CURDIR)/output/kernel.dtb
 
+dts:
+	$(Q)$(MAKE) -C $(CURDIR)/linux O=$(CURDIR)/build CROSS_COMPILE=arm-linux-gnueabihf- ARCH=arm dtbs
+	$(Q)cp $(CURDIR)/build/arch/arm/boot/dts/caninos_labrador.dtb $(CURDIR)/output/kernel.dtb
+
 ethernet:
 	$(Q)$(MAKE) -C $(CURDIR)/linux O=$(CURDIR)/build M=$(CURDIR)/linux/drivers/net/ethernet/caninos CROSS_COMPILE=arm-linux-gnueabihf- ARCH=arm
 	
 realtek:
+	$(Q)$(MAKE) -C $(CURDIR)/linux O=$(CURDIR)/build M=$(CURDIR)/linux/drivers/net/phy CROSS_COMPILE=arm-linux-gnueabihf- ARCH=arm
+
+phy:
 	$(Q)$(MAKE) -C $(CURDIR)/linux O=$(CURDIR)/build M=$(CURDIR)/linux/drivers/net/phy CROSS_COMPILE=arm-linux-gnueabihf- ARCH=arm
 
 clean:
