@@ -25,6 +25,9 @@ kernel:
 
 ethernet:
 	$(Q)$(MAKE) -C $(CURDIR)/linux O=$(CURDIR)/build M=$(CURDIR)/linux/drivers/net/ethernet/caninos CROSS_COMPILE=arm-linux-gnueabihf- ARCH=arm
+	
+realtek:
+	$(Q)$(MAKE) -C $(CURDIR)/linux O=$(CURDIR)/build M=$(CURDIR)/linux/drivers/net/phy CROSS_COMPILE=arm-linux-gnueabihf- ARCH=arm
 
 clean:
 	$(Q)rm -rf build output
