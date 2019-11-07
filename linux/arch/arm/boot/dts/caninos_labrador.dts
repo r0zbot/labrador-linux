@@ -498,6 +498,8 @@
 		    interrupts = < 0 0 0x4 >;
 		    pinctrl-names = "default";
 		    pinctrl-0 = <&ethernet_state_default>;
+		    phy-mode = "rmii";
+			phy-handle = <&phy0>;
 		    
 		    phy-power-gpio = <&gpio 43 0>; // GPIOB11 active 1:low 0:high
 		    phy-reset-gpio = <&gpio 127 0>; // GPIOD31 active 1:low 0:high
@@ -505,8 +507,12 @@
 		    
 		    address-bits = <48>;
 		    max-frame-size = <1518>;
-
 		    status = "okay";
+
+		    phy0: ethernet-phy@0 {
+				compatible = "RTL8201F, rtl8201f";
+				reg = <0>;
+			};
 	    };
 	    
 	    usb0: usb@b0600000 {
