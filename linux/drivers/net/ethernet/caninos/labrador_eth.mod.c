@@ -61,7 +61,6 @@ __attribute__((section("__versions"))) = {
 	{ 0x54835b84, __VMLINUX_SYMBOL_STR(of_get_property) },
 	{ 0x49ebacbd, __VMLINUX_SYMBOL_STR(_clear_bit) },
 	{ 0x2c08d864, __VMLINUX_SYMBOL_STR(phy_start) },
-	{ 0xc45ebc63, __VMLINUX_SYMBOL_STR(phy_resume) },
 	{ 0x815588a6, __VMLINUX_SYMBOL_STR(clk_enable) },
 	{ 0x7c9a7371, __VMLINUX_SYMBOL_STR(clk_prepare) },
 	{ 0x5fc56a46, __VMLINUX_SYMBOL_STR(_raw_spin_unlock) },

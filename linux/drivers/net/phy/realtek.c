@@ -121,9 +121,9 @@ static int rtl8211f_config_init(struct phy_device *phydev)
 
 static struct phy_driver realtek_drvs[] = {
 	{
-		.phy_id         = 0x00008201,
-		.name           = "RTL8201CP Ethernet",
-		.phy_id_mask    = 0x0000ffff,
+		.phy_id         = 0xffffffff,
+		.name           = "RTL8201CP Ethernet caninizado",
+		.phy_id_mask    = 0x00000000,
 		.features       = PHY_BASIC_FEATURES,
 		.flags          = PHY_HAS_INTERRUPT,
 		.config_aneg    = &genphy_config_aneg,

@@ -294,6 +294,118 @@ __va_to_pa(void *addr, struct netdata_local *pldat)
 
     return phaddr;
 }
+typedef struct{
+    int phy_reset_gpio;
+    int phy_power_gpio;
+}  phy_gpio;
+
+static int ethernet_set_pin_mux(struct platform_device * pdev)
+{
+    u32 temp;
+    INFO_MSG(" ethernet_set_pin_mux(struct platform_device * pdev)");
+
+    struct pinctrl * ethernet_ppc;
+    ethernet_ppc = pinctrl_get_select_default(&pdev->dev);
+
+    pinctrl_put(ethernet_ppc);
+    
+    writel(readl(MFP_CTL3) | (0x1 << 30), MFP_CTL3);
+    writel((readl(PAD_DRV0) & 0xffff3fff) | 0x8000, PAD_DRV0);
+
+    //setting the mux of GPIOB11/OEN to digital, otherwise GPIO will not work
+    temp = readl(MFP_CTL1);
+    temp &= ~(0x3<<21);//mask
+    temp |= (0x2<<21);//set bits[22:21] = 0b10
+    writel(temp, MFP_CTL1);
+    return 0;
+}
+
+static int
+reset(struct platform_device *pdev)
+{
+    u32 cnt, phy_id;
+    INFO_MSG(" ethernet_phy_setup(void)");
+    static phy_gpio global_phy_gpio;
+    u16 reg_val;
+    int ret;
+
+    struct device * dev = &pdev->dev;
+
+// struct pinctrl * ethernet_ppc;
+//     ethernet_ppc = pinctrl_get_select_default(&pdev->dev);
+
+//     pinctrl_put(ethernet_ppc);
+
+    // ethernet_set_pin_mux(pdev);
+
+    global_phy_gpio.phy_reset_gpio = 
+        of_get_named_gpio(dev->of_node, "phy-reset-gpio", 0);
+    
+    if (!gpio_is_valid(global_phy_gpio.phy_reset_gpio))
+    {
+        INFO_MSG("could not get reset gpio\n");
+        return -ENODEV;
+    }
+    global_phy_gpio.phy_power_gpio = 
+        of_get_named_gpio(dev->of_node, "phy-power-gpio", 0);
+    
+    if (!gpio_is_valid(global_phy_gpio.phy_power_gpio))
+    {
+        INFO_MSG("could not get power gpio\n");
+        return -ENODEV;
+    }
+    
+    ret = devm_gpio_request(dev, global_phy_gpio.phy_reset_gpio, "phy_reset");
+    
+    if (ret)
+    {
+        INFO_MSG("could not request reset gpio\n");
+        return ret;
+    }
+    ret = devm_gpio_request(dev, global_phy_gpio.phy_power_gpio, "phy_power");
+    
+    if (ret)
+    {
+        INFO_MSG("could not request power gpio\n");
+        return ret;
+    }
+    
+    
+    gpio_direction_output(global_phy_gpio.phy_reset_gpio, 0);
+    gpio_direction_output(global_phy_gpio.phy_power_gpio, 0);
+    gpio_set_value(global_phy_gpio.phy_power_gpio, 0);
+ 
+    gpio_set_value(global_phy_gpio.phy_reset_gpio, 0);
+    
+    if (gpio_is_valid(global_phy_gpio.phy_power_gpio))
+    { 
+        gpio_set_value(global_phy_gpio.phy_power_gpio, 1);
+        INFO_MSG("setting gpio to on");  
+        // mdelay(30000);//time for power up
+    }
+    else{
+        INFO_MSG("phy_power_gpio is no Valid");
+        return 1;
+    }
+    
+    if (gpio_is_valid(global_phy_gpio.phy_reset_gpio))
+    {       
+        gpio_set_value(global_phy_gpio.phy_reset_gpio, 1);
+        mdelay(150);//time for power up
+        gpio_set_value(global_phy_gpio.phy_reset_gpio, 0);
+        mdelay(12);//time for reset
+        gpio_set_value(global_phy_gpio.phy_reset_gpio, 1);
+
+        INFO_MSG("Reset_Done"); 
+    }else{
+        ERR_MSG("phy_reset_gpio is no Valid");
+        return -ENOMEM;
+    }
+    //time required to access registers
+    mdelay(150);
+    return 0;
+}
+
 
 static void 
 __labrador_params_setup(struct netdata_local *pldat)
@@ -491,7 +603,7 @@ labrador_eth_open(struct net_device *ndev)
         return ret;
 
     /* Suspended PHY makes LPC ethernet core block, so resume now */
-    phy_resume(ndev->phydev);
+    // phy_resume(ndev->phydev);
 
     /* Reset and initialize */
     __labrador_eth_reset(pldat);
@@ -795,11 +907,13 @@ __labrador_handle_xmit(struct net_device *ndev)
 static int 
 labrador_mdio_read(struct mii_bus *bus, int phy_id, int phyreg)
 {
-    INFO_MSG("labrador_mdio_read");
 
     struct netdata_local *pldat = bus->priv;
     unsigned long timeout = jiffies + msecs_to_jiffies(100);
     int lps;
+
+    INFO_MSG("phy_id %#010x\n", phy_id);
+    INFO_MSG("phyreg %#010x\n", phyreg);
 
     /* devo colocar isso embaixo do check de busy? */
     writel(((phy_id << 21) | (phyreg << 16)), LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
@@ -818,6 +932,8 @@ labrador_mdio_read(struct mii_bus *bus, int phy_id, int phyreg)
     lps = readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
     /* estamos sobre-escrevendo o clock divider settings aqui? */
     writel(0, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
+
+    INFO_MSG("labrador_mdio_read (%d)");
 
     return lps;
 }
@@ -1054,118 +1170,6 @@ use_iram_for_net(struct device *dev)
     if (dev && dev->of_node)
         return of_property_read_bool(dev->of_node, "use-iram");
     return false;
-}
-
-typedef struct{
-    int phy_reset_gpio;
-    int phy_power_gpio;
-}  phy_gpio;
-
-static int ethernet_set_pin_mux(struct platform_device * pdev)
-{
-    u32 temp;
-    INFO_MSG(" ethernet_set_pin_mux(struct platform_device * pdev)");
-
-    struct pinctrl * ethernet_ppc;
-    ethernet_ppc = pinctrl_get_select_default(&pdev->dev);
-
-    pinctrl_put(ethernet_ppc);
-    
-    writel(readl(MFP_CTL3) | (0x1 << 30), MFP_CTL3);
-    writel((readl(PAD_DRV0) & 0xffff3fff) | 0x8000, PAD_DRV0);
-
-    //setting the mux of GPIOB11/OEN to digital, otherwise GPIO will not work
-    temp = readl(MFP_CTL1);
-    temp &= ~(0x3<<21);//mask
-    temp |= (0x2<<21);//set bits[22:21] = 0b10
-    writel(temp, MFP_CTL1);
-    return 0;
-}
-
-static int
-reset(struct platform_device *pdev)
-{
-    u32 cnt, phy_id;
-    INFO_MSG(" ethernet_phy_setup(void)");
-    static phy_gpio global_phy_gpio;
-    u16 reg_val;
-    int ret;
-
-    struct device * dev = &pdev->dev;
-
-// struct pinctrl * ethernet_ppc;
-//     ethernet_ppc = pinctrl_get_select_default(&pdev->dev);
-
-//     pinctrl_put(ethernet_ppc);
-
-    // ethernet_set_pin_mux(pdev);
-
-    global_phy_gpio.phy_reset_gpio = 
-        of_get_named_gpio(dev->of_node, "phy-reset-gpio", 0);
-    
-    if (!gpio_is_valid(global_phy_gpio.phy_reset_gpio))
-    {
-        INFO_MSG("could not get reset gpio\n");
-        return -ENODEV;
-    }
-    global_phy_gpio.phy_power_gpio = 
-        of_get_named_gpio(dev->of_node, "phy-power-gpio", 0);
-    
-    if (!gpio_is_valid(global_phy_gpio.phy_power_gpio))
-    {
-        INFO_MSG("could not get power gpio\n");
-        return -ENODEV;
-    }
-    
-    ret = devm_gpio_request(dev, global_phy_gpio.phy_reset_gpio, "phy_reset");
-    
-    if (ret)
-    {
-        INFO_MSG("could not request reset gpio\n");
-        return ret;
-    }
-    ret = devm_gpio_request(dev, global_phy_gpio.phy_power_gpio, "phy_power");
-    
-    if (ret)
-    {
-        INFO_MSG("could not request power gpio\n");
-        return ret;
-    }
-    
-    
-    gpio_direction_output(global_phy_gpio.phy_reset_gpio, 0);
-    gpio_direction_output(global_phy_gpio.phy_power_gpio, 0);
-    gpio_set_value(global_phy_gpio.phy_power_gpio, 0);
- 
-    gpio_set_value(global_phy_gpio.phy_reset_gpio, 0);
-    
-    if (gpio_is_valid(global_phy_gpio.phy_power_gpio))
-    { 
-        gpio_set_value(global_phy_gpio.phy_power_gpio, 1);
-        INFO_MSG("setting gpio to on");  
-        // mdelay(30000);//time for power up
-    }
-    else{
-        INFO_MSG("phy_power_gpio is no Valid");
-        return 1;
-    }
-    
-    if (gpio_is_valid(global_phy_gpio.phy_reset_gpio))
-    {       
-        gpio_set_value(global_phy_gpio.phy_reset_gpio, 1);
-        mdelay(150);//time for power up
-        gpio_set_value(global_phy_gpio.phy_reset_gpio, 0);
-        mdelay(12);//time for reset
-        gpio_set_value(global_phy_gpio.phy_reset_gpio, 1);
-
-        INFO_MSG("Reset_Done"); 
-    }else{
-        ERR_MSG("phy_reset_gpio is no Valid");
-        return -ENOMEM;
-    }
-    //time required to access registers
-    mdelay(150);
-    return 0;
 }
 
 static int 
