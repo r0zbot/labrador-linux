@@ -333,8 +333,6 @@ static int owl_gpio_probe(struct platform_device *pdev)
 	int i, irq;
 	int ret;
 
-
-
 	for (i = 0; i < OWL_GPIO_BANKS; i++)
 	{
 		res = platform_get_resource(pdev, IORESOURCE_IRQ, i);
@@ -383,8 +381,6 @@ static int owl_gpio_probe(struct platform_device *pdev)
 	{
 		irq_set_chained_handler(owl_gpio_banks[i].irq, owl_gpio_irq_handler);
 	}
-		
- 
 
 	return 0;
 }

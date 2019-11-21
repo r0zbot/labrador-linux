@@ -47,6 +47,8 @@
 #include <linux/of_platform.h>
 #include <linux/of_gpio.h>
 
+#include <mach/hardware.h>
+#include <mach/module-owl.h>
 #include <mach/clkname.h>
 
 #define MODNAME "labrador-eth"
@@ -1059,6 +1061,27 @@ typedef struct{
     int phy_power_gpio;
 }  phy_gpio;
 
+static int ethernet_set_pin_mux(struct platform_device * pdev)
+{
+    u32 temp;
+    INFO_MSG(" ethernet_set_pin_mux(struct platform_device * pdev)");
+
+    struct pinctrl * ethernet_ppc;
+    ethernet_ppc = pinctrl_get_select_default(&pdev->dev);
+
+    pinctrl_put(ethernet_ppc);
+    
+    writel(readl(MFP_CTL3) | (0x1 << 30), MFP_CTL3);
+    writel((readl(PAD_DRV0) & 0xffff3fff) | 0x8000, PAD_DRV0);
+
+    //setting the mux of GPIOB11/OEN to digital, otherwise GPIO will not work
+    temp = readl(MFP_CTL1);
+    temp &= ~(0x3<<21);//mask
+    temp |= (0x2<<21);//set bits[22:21] = 0b10
+    writel(temp, MFP_CTL1);
+    return 0;
+}
+
 static int
 reset(struct platform_device *pdev)
 {
@@ -1069,6 +1092,13 @@ reset(struct platform_device *pdev)
     int ret;
 
     struct device * dev = &pdev->dev;
+
+// struct pinctrl * ethernet_ppc;
+//     ethernet_ppc = pinctrl_get_select_default(&pdev->dev);
+
+//     pinctrl_put(ethernet_ppc);
+
+    // ethernet_set_pin_mux(pdev);
 
     global_phy_gpio.phy_reset_gpio = 
         of_get_named_gpio(dev->of_node, "phy-reset-gpio", 0);
@@ -1111,7 +1141,9 @@ reset(struct platform_device *pdev)
     
     if (gpio_is_valid(global_phy_gpio.phy_power_gpio))
     { 
-        gpio_set_value(global_phy_gpio.phy_power_gpio, 1);  
+        gpio_set_value(global_phy_gpio.phy_power_gpio, 1);
+        INFO_MSG("setting gpio to on");  
+        // mdelay(30000);//time for power up
     }
     else{
         INFO_MSG("phy_power_gpio is no Valid");

@@ -1131,6 +1131,25 @@ static struct of_device_id owl_pinctrl_of_match[] = {
 	{ },
 };
 
+static int ethernet_set_pin_mux2(void)
+{
+    u32 temp;
+    pr_info(" ethernet_set_pin_mux(struct platform_device * pdev)");
+    pr_info(" SETANDO O PIN MUX!!!!!!!!!!!!!!!!!!!!!");
+    
+    act_writel(act_readl(MFP_CTL3) | (0x1 << 30), MFP_CTL3);
+    act_writel((act_readl(PAD_DRV0) & 0xffff3fff) | 0x8000, PAD_DRV0);
+
+    //setting the mux of GPIOB11/OEN to digital, otherwise GPIO will not work
+    temp = act_readl(MFP_CTL1);
+    temp &= ~(0x3<<21);//mask
+    temp |= (0x2<<21);//set bits[22:21] = 0b10
+    act_writel(temp, MFP_CTL1);
+    return 0;
+}
+
+
+
 static int owl_pinctrl_probe(struct platform_device *pdev)
 {
     struct owl_pinctrl_soc_info * info = &owl_pinctrl_info;
@@ -1167,6 +1186,8 @@ static int owl_pinctrl_probe(struct platform_device *pdev)
 	}
 	
 	platform_set_drvdata(pdev, apctl);
+
+	ethernet_set_pin_mux2();
 	
  
 	return 0;
