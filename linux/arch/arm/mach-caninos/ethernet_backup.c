@@ -481,6 +481,8 @@ static int ethernet_read_phy_reg(u16 reg_addr, u16 * val)
 {
 	u32 op_reg, phy_addr = ethernet_phy_addr;
     INFO_MSG(" ethernet_read_phy_reg(u16 reg_addr, u16 * val)");
+    INFO_MSG("reg_addr %d\n", reg_addr);
+    INFO_MSG("val %d\n", *val);
 
 	do {
 		op_reg = act_readl(MAC_CSR10);

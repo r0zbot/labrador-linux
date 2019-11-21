@@ -801,8 +801,8 @@ labrador_mdio_read(struct mii_bus *bus, int phy_id, int phyreg)
     unsigned long timeout = jiffies + msecs_to_jiffies(100);
     int lps;
 
-    /* devo colocar isso embaixo do check de busy? */
-    writel(((phy_id << 21) | (phyreg << 16)), LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
+    writel(((phy_id << 21) | (phyreg << 16)) | LAB_MII_SERIAL_START | 
+        LAB_MII_SERIAL_OPCODE_READ, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
 
     /* Wait for unbusy status */
     while (readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base)) & LAB_MII_SERIAL_BUSY) {
@@ -811,13 +811,9 @@ labrador_mdio_read(struct mii_bus *bus, int phy_id, int phyreg)
         cpu_relax();
     }
 
-    writel(LAB_MII_SERIAL_START | LAB_MII_SERIAL_OPCODE_READ, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
-
-    /* aguardar novamente o busy? */
-
     lps = readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
     /* estamos sobre-escrevendo o clock divider settings aqui? */
-    writel(0, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
+    // writel(0, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
 
     return lps;
 }
