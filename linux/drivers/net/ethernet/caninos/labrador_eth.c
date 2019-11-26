@@ -1336,7 +1336,8 @@ labrador_eth_drv_probe(struct platform_device *pdev)
     device_set_wakeup_enable(&pdev->dev, 0);
 
     INFO_MSG("fim do probe");
-
+    INFO_MSG("testando falha no probe....");
+    writel(0x104e0000,0x104e0000);
     return 0;
 
 err_out_unregister_netdev:
