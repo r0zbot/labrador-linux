@@ -916,6 +916,7 @@ labrador_mdio_read(struct mii_bus *bus, int phy_addr, int phyreg)
     unsigned long timeout = jiffies + msecs_to_jiffies(100);
     int lps;
 
+    INFO_MSG("bus_name: %s",bus->name);
     INFO_MSG("phy_addr %#010x\n", phy_addr);
     INFO_MSG("phyreg %#010x\n", phyreg);
 
@@ -1160,7 +1161,7 @@ static int __labrador_handle_recv(struct net_device *ndev, int budget)
 
 static int labrador_eth_poll(struct napi_struct *napi, int budget)
 {
-    INFO_MSG("labrador_eth_poll");
+    // INFO_MSG("labrador_eth_poll");
 
     struct netdata_local *pldat = container_of(napi, struct netdata_local, napi);
     struct net_device *ndev = pldat->ndev;
