@@ -919,9 +919,6 @@ labrador_mdio_read(struct mii_bus *bus, int phy_addr, int phyreg)
     INFO_MSG("phy_addr %#010x\n", phy_addr);
     INFO_MSG("phyreg %#010x\n", phyreg);
 
-    /* devo colocar isso embaixo do check de busy? */
-    writel(((phy_addr << 21) | (phyreg << 16)), LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
-
     /* Wait for unbusy status */
     while (readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base)) & LAB_MII_SERIAL_BUSY) {
         if (time_after(jiffies, timeout))
@@ -929,13 +926,23 @@ labrador_mdio_read(struct mii_bus *bus, int phy_addr, int phyreg)
         cpu_relax();
     }
 
-    writel(LAB_MII_SERIAL_START | LAB_MII_SERIAL_OPCODE_READ, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
-
-    /* aguardar novamente o busy? */
+    /* devo colocar isso embaixo do check de busy? */
+    lps = readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
+    writel(lps | (phy_addr << 21) | (phyreg << 16), LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
 
     lps = readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
+    writel(lps | LAB_MII_SERIAL_START | LAB_MII_SERIAL_OPCODE_READ, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
+
+    /* aguardar novamente o busy */
+    while (readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base)) & LAB_MII_SERIAL_BUSY) {
+        if (time_after(jiffies, timeout))
+            return -EIO;
+        cpu_relax();
+    }
+    
+    lps = readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
     /* estamos sobre-escrevendo o clock divider settings aqui? */
-    writel(0, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
+    // writel(lps | LAB_MII_SERIAL_BUSY, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
 
     INFO_MSG("labrador_mdio_read (%#010x)",lps);
 
@@ -1072,18 +1079,24 @@ labrador_mii_init(struct netdata_local *pldat)
 
     // platform_set_drvdata(pldat->pdev, pldat->mii_bus);
 
-    if (mdiobus_register(pldat->mii_bus))
+    if (mdiobus_register(pldat->mii_bus)){
+        INFO_MSG("mdiobus_register failed!");
         goto err_out_unregister_bus;
+    }
 
-    if (labrador_mii_probe(pldat->ndev) != 0)
+    if (labrador_mii_probe(pldat->ndev) != 0){
+        INFO_MSG("labrador_mii_probe failed!");
         goto err_out_unregister_bus;
+    }
 
     return 0;
 
 err_out_unregister_bus:
+    INFO_MSG("mii_init - err_out_unregister_bus");
     mdiobus_unregister(pldat->mii_bus);
     mdiobus_free(pldat->mii_bus);
 err_out:
+    INFO_MSG("mii_init - err_out");
     return err;
 }
 
@@ -1418,8 +1431,10 @@ labrador_eth_drv_probe(struct platform_device *pdev)
 
 
 err_out_unregister_netdev:
+    INFO_MSG("probe - err_out_unregister_netdev");
     unregister_netdev(ndev);
 err_out_dma_unmap:
+    INFO_MSG("probe - err_out_dma_unmap");
     // if (!use_iram_for_net(&pldat->pdev->dev) ||
     //     pldat->dma_buff_size > lpc32xx_return_iram_size())
     //     dma_free_coherent(&pldat->pdev->dev, pldat->dma_buff_size,
@@ -1430,16 +1445,22 @@ err_out_dma_unmap:
                   pldat->dma_buff_base_v,
                   pldat->dma_buff_base_p);
 err_out_free_irq:
+    INFO_MSG("probe - err_out_free_irq");
     free_irq(ndev->irq, ndev);
 err_out_iounmap:
+    INFO_MSG("probe - err_out_iounmap");
     iounmap(pldat->net_base);
 err_out_disable_clocks:
+    INFO_MSG("probe - err_out_disable_clocks");
     clk_disable_unprepare(pldat->clk);
 err_out_clk_put:
+    INFO_MSG("probe - err_out_clk_put");
     clk_put(pldat->clk);
 err_out_free_dev:
+    INFO_MSG("probe - err_out_free_dev");
     free_netdev(ndev);
 err_exit:
+    INFO_MSG("probe - err_exit");
     pr_err("%s: not found (%d).\n", MODNAME, ret);
     return ret;
 }

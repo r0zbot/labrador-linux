@@ -504,7 +504,7 @@
 
 		    phy0: ethernet-phy@0 {
 				compatible = "RTL8201F, rtl8201f";
-				reg = <0>;
+				reg = <1>;
 			};
 	    };
 	    
