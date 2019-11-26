@@ -614,12 +614,6 @@ labrador_eth_open(struct net_device *ndev)
     netif_start_queue(ndev);
     napi_enable(&pldat->napi);
 
-    INFO_MSG("testando falha no open....");
-    int* batata;
-    batata = NULL;
-    INFO_MSG("é pra dar ruim: %d", *batata);
-    return 0;
-
     return 0;
 }
 
@@ -1342,6 +1336,7 @@ labrador_eth_drv_probe(struct platform_device *pdev)
     device_set_wakeup_enable(&pdev->dev, 0);
 
     INFO_MSG("fim do probe");
+    return 0;
 
 err_out_unregister_netdev:
     unregister_netdev(ndev);
