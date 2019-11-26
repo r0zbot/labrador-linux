@@ -260,6 +260,7 @@ struct netdata_local {
     unsigned int            rxidx;
     struct mii_bus          *mii_bus;
     struct clk              *clk;
+    struct clk              *rmii_clk;
     dma_addr_t              dma_buff_base_p;
     void                    *dma_buff_base_v;
     size_t                  dma_buff_size;
@@ -416,7 +417,7 @@ __labrador_params_setup(struct netdata_local *pldat)
 
     tmp = readl(LAB_ENET_OPMODE(pldat->net_base));
     /* puts tx/rx processes in stopped states */
-    writel(LAB_OPMODE_TX_STOP | LAB_OPMODE_RX_STOP | tmp, LAB_ENET_OPMODE(pldat));
+    writel(LAB_OPMODE_TX_STOP | LAB_OPMODE_RX_STOP | tmp, LAB_ENET_OPMODE(pldat->net_base));
 
     if (pldat->duplex == DUPLEX_FULL) 
         tmp |= LAB_OPMODE_FULL_DUPLEX;
@@ -429,7 +430,9 @@ __labrador_params_setup(struct netdata_local *pldat)
         tmp |= LAB_OPMODE_SPEED_10M;
 
     /* puts tx/rx processes in running states */
-    writel(LAB_OPMODE_TX_START | LAB_OPMODE_RX_START | tmp, LAB_ENET_OPMODE(pldat));
+    writel(LAB_OPMODE_TX_START | LAB_OPMODE_RX_START | tmp, LAB_ENET_OPMODE(pldat->net_base));
+
+    // writel(1 << 30, LAB_ENET_MII_MNGT(pldat->net_base));
 }
 
 static int 
@@ -470,6 +473,7 @@ static void
 __labrador_eth_reset(struct netdata_local *pldat)
 {
     INFO_MSG("__labrador_eth_reset");
+    module_reset(MODULE_RST_ETHERNET);
     writel(readl(pldat->net_base) | LAB_BUSMODE_RESET, pldat->net_base);
     do {
         udelay(10);
@@ -933,7 +937,7 @@ labrador_mdio_read(struct mii_bus *bus, int phy_addr, int phyreg)
     /* estamos sobre-escrevendo o clock divider settings aqui? */
     writel(0, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
 
-    INFO_MSG("labrador_mdio_read (%d)");
+    INFO_MSG("labrador_mdio_read (%#010x)",lps);
 
     return lps;
 }
@@ -1172,6 +1176,65 @@ use_iram_for_net(struct device *dev)
     return false;
 }
 
+static int ethernet_get_clk(void)
+{
+    unsigned long tfreq, freq;
+    INFO_MSG(" ethernet_get_clk(void)");
+    struct clk * clk, *ethernet_clk;
+    int ret;
+    
+    ethernet_clk = clk_get(NULL, CLKNAME_CMUMOD_ETHERNET);
+    
+    if (IS_ERR(ethernet_clk))
+    {
+        ethernet_clk = NULL;
+        return -ENODEV;
+    }
+    
+    ret = clk_prepare(ethernet_clk);
+    
+    if (ret)
+    {
+        clk_put(ethernet_clk);
+        ethernet_clk = NULL;
+        return ret;
+    }
+    
+    clk = clk_get(NULL, CLKNAME_RMII_REF_CLK);
+    
+    if (IS_ERR(clk))
+    {
+        clk_put(ethernet_clk);
+        ethernet_clk = NULL;
+        return -ENODEV;
+    }
+    
+    tfreq = 50 * 1000 * 1000;
+    
+    freq = clk_round_rate(clk, tfreq);
+    
+    if (freq != tfreq)
+    {
+        clk_put(clk);
+        clk_put(ethernet_clk);
+        ethernet_clk = NULL;
+        return -EINVAL;
+    }
+    
+    ret = clk_set_rate(clk, freq);
+    
+    if (ret)
+    {
+        clk_put(clk);
+        clk_put(ethernet_clk);
+        ethernet_clk = NULL;
+        return ret;
+    }
+    
+    clk_put(clk);
+    return 0;
+}
+
 static int 
 labrador_eth_drv_probe(struct platform_device *pdev)
 {
@@ -1183,8 +1246,6 @@ labrador_eth_drv_probe(struct platform_device *pdev)
     int irq, ret;
     u32 tmp;
     INFO_MSG("labrador_eth_drv_probe");
-
-    reset(pdev);
 
     /* Get platform resources */
     res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
@@ -1221,6 +1282,11 @@ labrador_eth_drv_probe(struct platform_device *pdev)
         ret = PTR_ERR(pldat->clk);
         goto err_out_free_dev;
     }
+
+    // ret = clk_set_rate(pldat->clk, 50 * 1000 * 1000);
+
+    ethernet_get_clk();
+    reset(pdev);
 
     /* Enable network clock */
     ret = clk_prepare_enable(pldat->clk);
@@ -1314,6 +1380,16 @@ labrador_eth_drv_probe(struct platform_device *pdev)
     pldat->duplex = DUPLEX_FULL;
     __labrador_params_setup(pldat);
 
+    INFO_MSG("CSR9: %#010x", readl(LAB_ENET_MII_MNGT(pldat->net_base)));
+    INFO_MSG("CSR10: %#010x", readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base)));
+    INFO_MSG("MAC_CTRL: %#010x", readl(LAB_ENET_MAC_CTRL(pldat->net_base)));
+
+    void __iomem *temp = ioremap(0xb0160000, resource_size(res));
+    INFO_MSG("CLKEN0: %#010x", readl(temp+0x00a0));
+    INFO_MSG("CLKEN1: %#010x", readl(temp+0x00a4));
+    INFO_MSG("DEVRST0: %#010x", readl(temp+0x00a8));
+    INFO_MSG("DEVRST1: %#010x", readl(temp+0x00ac));
+
     netif_napi_add(ndev, &pldat->napi, labrador_eth_poll, NAPI_WEIGHT);
 
     ret = register_netdev(ndev);
@@ -1336,7 +1412,10 @@ labrador_eth_drv_probe(struct platform_device *pdev)
     device_set_wakeup_enable(&pdev->dev, 0);
 
     INFO_MSG("fim do probe");
+
     return 0;
+
+
 
 err_out_unregister_netdev:
     unregister_netdev(ndev);
