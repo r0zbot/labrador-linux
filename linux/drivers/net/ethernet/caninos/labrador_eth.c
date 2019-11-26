@@ -905,18 +905,18 @@ __labrador_handle_xmit(struct net_device *ndev)
  * MAC<--->PHY support functions
  */
 static int 
-labrador_mdio_read(struct mii_bus *bus, int phy_id, int phyreg)
+labrador_mdio_read(struct mii_bus *bus, int phy_addr, int phyreg)
 {
 
     struct netdata_local *pldat = bus->priv;
     unsigned long timeout = jiffies + msecs_to_jiffies(100);
     int lps;
 
-    INFO_MSG("phy_id %#010x\n", phy_id);
+    INFO_MSG("phy_addr %#010x\n", phy_addr);
     INFO_MSG("phyreg %#010x\n", phyreg);
 
     /* devo colocar isso embaixo do check de busy? */
-    writel(((phy_id << 21) | (phyreg << 16)), LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
+    writel(((phy_addr << 21) | (phyreg << 16)), LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
 
     /* Wait for unbusy status */
     while (readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base)) & LAB_MII_SERIAL_BUSY) {
@@ -938,7 +938,7 @@ labrador_mdio_read(struct mii_bus *bus, int phy_id, int phyreg)
     return lps;
 }
 
-static int labrador_mdio_write(struct mii_bus *bus, int phy_id, int phyreg,
+static int labrador_mdio_write(struct mii_bus *bus, int phy_addr, int phyreg,
             u16 phydata)
 {
     INFO_MSG("labrador_mdio_write");
@@ -946,7 +946,7 @@ static int labrador_mdio_write(struct mii_bus *bus, int phy_id, int phyreg,
     struct netdata_local *pldat = bus->priv;
     unsigned long timeout = jiffies + msecs_to_jiffies(100);
 
-    writel(((phy_id << 21) | (phyreg << 16)), LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
+    writel(((phy_addr << 21) | (phyreg << 16)), LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
     writel(phydata, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
 
     /* Wait for completion */
