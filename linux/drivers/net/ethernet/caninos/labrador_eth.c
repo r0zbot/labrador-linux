@@ -167,6 +167,7 @@
 #define LAB_MII_SERIAL_START            (1 << 31)
 #define LAB_MII_SERIAL_BUSY             (1 << 31)
 #define LAB_MII_SERIAL_FREE             (0 << 31)
+#define LAB_MII_SERIAL_CLK_128          (4 << 28)
 #define LAB_MII_SERIAL_OPCODE_DISABLE   (0 << 26)
 #define LAB_MII_SERIAL_OPCODE_WRITE     (1 << 26)
 #define LAB_MII_SERIAL_OPCODE_READ      (2 << 26)
@@ -287,8 +288,8 @@ struct txrx_desc_t {
 static inline phys_addr_t 
 __va_to_pa(void *addr, struct netdata_local *pldat)
 {
-    INFO_MSG("__va_to_pa");
     phys_addr_t phaddr;
+    INFO_MSG("__va_to_pa");
 
     phaddr = addr - pldat->dma_buff_base_v;
     phaddr += pldat->dma_buff_base_p;
@@ -300,44 +301,13 @@ typedef struct{
     int phy_power_gpio;
 }  phy_gpio;
 
-static int ethernet_set_pin_mux(struct platform_device * pdev)
-{
-    u32 temp;
-    INFO_MSG(" ethernet_set_pin_mux(struct platform_device * pdev)");
-
-    struct pinctrl * ethernet_ppc;
-    ethernet_ppc = pinctrl_get_select_default(&pdev->dev);
-
-    pinctrl_put(ethernet_ppc);
-    
-    writel(readl(MFP_CTL3) | (0x1 << 30), MFP_CTL3);
-    writel((readl(PAD_DRV0) & 0xffff3fff) | 0x8000, PAD_DRV0);
-
-    //setting the mux of GPIOB11/OEN to digital, otherwise GPIO will not work
-    temp = readl(MFP_CTL1);
-    temp &= ~(0x3<<21);//mask
-    temp |= (0x2<<21);//set bits[22:21] = 0b10
-    writel(temp, MFP_CTL1);
-    return 0;
-}
-
 static int
 reset(struct platform_device *pdev)
-{
-    u32 cnt, phy_id;
-    INFO_MSG(" ethernet_phy_setup(void)");
+{ 
     static phy_gpio global_phy_gpio;
-    u16 reg_val;
     int ret;
-
     struct device * dev = &pdev->dev;
-
-// struct pinctrl * ethernet_ppc;
-//     ethernet_ppc = pinctrl_get_select_default(&pdev->dev);
-
-//     pinctrl_put(ethernet_ppc);
-
-    // ethernet_set_pin_mux(pdev);
+    INFO_MSG(" ethernet_phy_setup(void)");
 
     global_phy_gpio.phy_reset_gpio = 
         of_get_named_gpio(dev->of_node, "phy-reset-gpio", 0);
@@ -411,9 +381,8 @@ reset(struct platform_device *pdev)
 static void 
 __labrador_params_setup(struct netdata_local *pldat)
 {
-    INFO_MSG("__labrador_params_setup");
-
     u32 tmp;
+    INFO_MSG("__labrador_params_setup");
 
     tmp = readl(LAB_ENET_OPMODE(pldat->net_base));
     /* puts tx/rx processes in stopped states */
@@ -439,9 +408,10 @@ static int
 __labrador_mii_mngt_reset(struct netdata_local *pldat)
 {
     INFO_MSG("__labrador_mii_mngt_reset");
-    /* pode estar errado */
-    writel(0, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
-    writel(0xcc000000, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
+    writel(LAB_MII_SERIAL_START | 
+           LAB_MII_SERIAL_CLK_128 | 
+           LAB_MII_SERIAL_OPCODE_CLOCKSET, 
+           LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
 
     return 0;
 }
@@ -493,11 +463,10 @@ labrador_eth_enable_int(void __iomem *regbase)
 static void 
 __labrador_txrx_desc_setup(struct netdata_local *pldat)
 {
-    INFO_MSG("__labrador_txrx_desc_setup");
-
     void *tbuff;
     int i;
     struct txrx_desc_t *ptxrxdesc;
+    INFO_MSG("__labrador_txrx_desc_setup");
 
     tbuff = PTR_ALIGN(pldat->dma_buff_base_v, 16);
 
@@ -655,8 +624,6 @@ __labrador_eth_interrupt(int irq, void *dev_id)
 static int 
 labrador_eth_close(struct net_device *ndev)
 {
-    INFO_MSG("labrador_eth_close");
-
     unsigned long flags;
     struct netdata_local *pldat = netdev_priv(ndev);
     INFO_MSG("labrador_eth_close");
@@ -684,10 +651,9 @@ labrador_eth_close(struct net_device *ndev)
 static int 
 labrador_eth_hard_start_xmit(struct sk_buff *skb, struct net_device *ndev)
 {
-    INFO_MSG("labrador_eth_hard_start_xmit");
-
     struct netdata_local *pldat = netdev_priv(ndev);
     struct txrx_desc_t *ptxrxdesc;
+    INFO_MSG("labrador_eth_hard_start_xmit");
 
     spin_lock_irq(&pldat->lock);
 
@@ -739,9 +705,8 @@ out:
  */
 static int __labrador_set_mac(struct netdata_local *pldat, u8 *mac)
 {
-    INFO_MSG("__labrador_set_mac");
-
     u32 tmp;
+    INFO_MSG("__labrador_set_mac");
 
     /* Set station address */
     tmp = mac[0] | ((u32)mac[1] << 8) | ((u32)mac[2] << 16) | ((u32)mac[3] << 24);
@@ -755,11 +720,10 @@ static int __labrador_set_mac(struct netdata_local *pldat, u8 *mac)
 
 static int labrador_set_mac_address(struct net_device *ndev, void *p)
 {
-    INFO_MSG("labrador_set_mac_address");
-
     struct sockaddr *addr = p;
     struct netdata_local *pldat = netdev_priv(ndev);
     unsigned long flags;
+    INFO_MSG("labrador_set_mac_address");
 
     if (!is_valid_ether_addr(addr->sa_data))
         return -EADDRNOTAVAIL;
@@ -777,9 +741,8 @@ static int labrador_set_mac_address(struct net_device *ndev, void *p)
 
 static void __labrador_get_mac(struct netdata_local *pldat, u8 *mac)
 {
-    INFO_MSG("__labrador_get_mac");
-
     u32 tmp;
+    INFO_MSG("__labrador_get_mac");
 
     /* Get station address */
     tmp = readl(LAB_ENET_MAC_LOW(pldat->net_base));
@@ -853,10 +816,9 @@ __labrador_eth_shutdown(struct netdata_local *pldat)
 static void 
 __labrador_handle_xmit(struct net_device *ndev)
 {
-    INFO_MSG("__labrador_handle_xmit");
-
     struct netdata_local *pldat = netdev_priv(ndev);
     u32 txstat;
+    INFO_MSG("__labrador_handle_xmit");
 
     while (pldat->last_tx_idx != pldat->txidx) {
         unsigned int skblen = pldat->skblen[pldat->last_tx_idx];
@@ -909,16 +871,18 @@ __labrador_handle_xmit(struct net_device *ndev)
  * MAC<--->PHY support functions
  */
 static int 
-labrador_mdio_read(struct mii_bus *bus, int phy_addr, int phyreg)
+labrador_mdio_read(struct mii_bus *bus, int phy_addr, int phy_reg)
 {
-
     struct netdata_local *pldat = bus->priv;
     unsigned long timeout = jiffies + msecs_to_jiffies(100);
     int lps;
 
-    INFO_MSG("bus_name: %s",bus->name);
-    INFO_MSG("phy_addr %#010x\n", phy_addr);
-    INFO_MSG("phyreg %#010x\n", phyreg);
+    // INFO_MSG("bus_name: %s",bus->name);
+    // INFO_MSG("phy_addr %#010x\n", phy_addr);
+    // INFO_MSG("phy_reg %#010x\n", phy_reg);
+
+    writel(LAB_MII_SERIAL_START | LAB_MII_SERIAL_OPCODE_READ | phy_addr << 21 | 
+           phy_reg << 16, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
 
     /* Wait for unbusy status */
     while (readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base)) & LAB_MII_SERIAL_BUSY) {
@@ -926,42 +890,26 @@ labrador_mdio_read(struct mii_bus *bus, int phy_addr, int phyreg)
             return -EIO;
         cpu_relax();
     }
-
-    /* devo colocar isso embaixo do check de busy? */
-    lps = readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
-    writel(lps | (phy_addr << 21) | (phyreg << 16), LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
-
-    lps = readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
-    writel(lps | LAB_MII_SERIAL_START | LAB_MII_SERIAL_OPCODE_READ, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
-
-    /* aguardar novamente o busy */
-    while (readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base)) & LAB_MII_SERIAL_BUSY) {
-        if (time_after(jiffies, timeout))
-            return -EIO;
-        cpu_relax();
-    }
     
     lps = readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
-    /* estamos sobre-escrevendo o clock divider settings aqui? */
-    // writel(lps | LAB_MII_SERIAL_BUSY, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
 
-    INFO_MSG("labrador_mdio_read (%#010x)",lps);
+    INFO_MSG("mdio_read -> (%#010x)",lps);
 
     return lps;
 }
 
-static int labrador_mdio_write(struct mii_bus *bus, int phy_addr, int phyreg,
-            u16 phydata)
+static int 
+labrador_mdio_write(struct mii_bus *bus, int phy_addr, int phy_reg,
+            u16 phy_data)
 {
-    INFO_MSG("labrador_mdio_write");
-
     struct netdata_local *pldat = bus->priv;
     unsigned long timeout = jiffies + msecs_to_jiffies(100);
+    INFO_MSG("labrador_mdio_write");
 
-    writel(((phy_addr << 21) | (phyreg << 16)), LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
-    writel(phydata, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
+    writel(LAB_MII_SERIAL_START | LAB_MII_SERIAL_OPCODE_WRITE | phy_addr << 21 | 
+           phy_reg << 16 | phy_data, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
 
-    /* Wait for completion */
+    /* Wait for unbusy status */
     while (readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base)) & LAB_MII_SERIAL_BUSY) {
         if (time_after(jiffies, timeout))
             return -EIO;
@@ -974,13 +922,11 @@ static int labrador_mdio_write(struct mii_bus *bus, int phy_addr, int phyreg,
 static void 
 labrador_handle_link_change(struct net_device *ndev)
 {
-    INFO_MSG("labrador_handle_link_change");
-
     struct netdata_local *pldat = netdev_priv(ndev);
     struct phy_device *phydev = ndev->phydev;
     unsigned long flags;
-
     bool status_change = false;
+    INFO_MSG("labrador_handle_link_change");
 
     spin_lock_irqsave(&pldat->lock, flags);
 
@@ -1012,10 +958,9 @@ labrador_handle_link_change(struct net_device *ndev)
 static int 
 labrador_mii_probe(struct net_device *ndev)
 {
-    INFO_MSG("labrador_mii_probe");
-
     struct netdata_local *pldat = netdev_priv(ndev);
     struct phy_device *phydev = phy_find_first(pldat->mii_bus);
+    INFO_MSG("labrador_mii_probe");
 
     if (!phydev) {
         netdev_err(ndev, "no PHY found\n");
@@ -1053,9 +998,8 @@ labrador_mii_probe(struct net_device *ndev)
 static int 
 labrador_mii_init(struct netdata_local *pldat)
 {
-    INFO_MSG("labrador_mii_init");
-
     int err = -ENXIO;
+    INFO_MSG("labrador_mii_init");
 
     pldat->mii_bus = mdiobus_alloc();
     if (!pldat->mii_bus) {
@@ -1103,12 +1047,11 @@ err_out:
 
 static int __labrador_handle_recv(struct net_device *ndev, int budget)
 {
-    INFO_MSG("__labrador_handle_recv");
-
     struct netdata_local *pldat = netdev_priv(ndev);
     struct sk_buff *skb;
     u32 len, rxstat;
     int rx_done = 0;
+    INFO_MSG("__labrador_handle_recv");
 
     while (rx_done < budget) {
         /* Get pointer to receive status */
@@ -1161,12 +1104,11 @@ static int __labrador_handle_recv(struct net_device *ndev, int budget)
 
 static int labrador_eth_poll(struct napi_struct *napi, int budget)
 {
-    // INFO_MSG("labrador_eth_poll");
-
     struct netdata_local *pldat = container_of(napi, struct netdata_local, napi);
     struct net_device *ndev = pldat->ndev;
     int rx_done = 0;
     struct netdev_queue *txq = netdev_get_tx_queue(ndev, 0);
+    INFO_MSG("labrador_eth_poll");
 
     __netif_tx_lock(txq, smp_processor_id());
     __labrador_handle_xmit(ndev);
@@ -1193,9 +1135,9 @@ use_iram_for_net(struct device *dev)
 static int ethernet_get_clk(void)
 {
     unsigned long tfreq, freq;
-    INFO_MSG(" ethernet_get_clk(void)");
     struct clk * clk, *ethernet_clk;
     int ret;
+    INFO_MSG(" ethernet_get_clk(void)");
     
     ethernet_clk = clk_get(NULL, CLKNAME_CMUMOD_ETHERNET);
     
@@ -1258,7 +1200,6 @@ labrador_eth_drv_probe(struct platform_device *pdev)
     struct phy_device *phydev;
     dma_addr_t dma_handle;
     int irq, ret;
-    u32 tmp;
     INFO_MSG("labrador_eth_drv_probe");
 
     /* Get platform resources */
@@ -1394,15 +1335,15 @@ labrador_eth_drv_probe(struct platform_device *pdev)
     pldat->duplex = DUPLEX_FULL;
     __labrador_params_setup(pldat);
 
-    INFO_MSG("CSR9: %#010x", readl(LAB_ENET_MII_MNGT(pldat->net_base)));
-    INFO_MSG("CSR10: %#010x", readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base)));
-    INFO_MSG("MAC_CTRL: %#010x", readl(LAB_ENET_MAC_CTRL(pldat->net_base)));
+    // INFO_MSG("CSR9: %#010x", readl(LAB_ENET_MII_MNGT(pldat->net_base)));
+    // INFO_MSG("CSR10: %#010x", readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base)));
+    // INFO_MSG("MAC_CTRL: %#010x", readl(LAB_ENET_MAC_CTRL(pldat->net_base)));
 
-    void __iomem *temp = ioremap(0xb0160000, resource_size(res));
-    INFO_MSG("CLKEN0: %#010x", readl(temp+0x00a0));
-    INFO_MSG("CLKEN1: %#010x", readl(temp+0x00a4));
-    INFO_MSG("DEVRST0: %#010x", readl(temp+0x00a8));
-    INFO_MSG("DEVRST1: %#010x", readl(temp+0x00ac));
+    // void __iomem *temp = ioremap(0xb0160000, resource_size(res));
+    // INFO_MSG("CLKEN0: %#010x", readl(temp+0x00a0));
+    // INFO_MSG("CLKEN1: %#010x", readl(temp+0x00a4));
+    // INFO_MSG("DEVRST0: %#010x", readl(temp+0x00a8));
+    // INFO_MSG("DEVRST1: %#010x", readl(temp+0x00ac));
 
     netif_napi_add(ndev, &pldat->napi, labrador_eth_poll, NAPI_WEIGHT);
 
