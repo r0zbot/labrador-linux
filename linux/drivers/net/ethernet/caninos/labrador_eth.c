@@ -1053,6 +1053,8 @@ static int __labrador_handle_recv(struct net_device *ndev, int budget)
     int rx_done = 0;
     INFO_MSG("__labrador_handle_recv");
 
+    /* adicionar outra condição para checar se realmente há alguma mensagem que 
+     * precisa ser handled no while abaixo */
     while (rx_done < budget) {
         /* Get pointer to receive status */
         rxstat = pldat->rx_desc_v[pldat->rxidx].status;
