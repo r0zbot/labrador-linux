@@ -934,12 +934,14 @@ labrador_mdio_read(struct mii_bus *bus, int phy_addr, int phyreg)
     lps = readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
     writel(lps | LAB_MII_SERIAL_START | LAB_MII_SERIAL_OPCODE_READ, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
 
+    udelay(100);
     /* aguardar novamente o busy */
     while (readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base)) & LAB_MII_SERIAL_BUSY) {
         if (time_after(jiffies, timeout))
             return -EIO;
         cpu_relax();
     }
+    udelay(100);
     
     lps = readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
     /* estamos sobre-escrevendo o clock divider settings aqui? */
