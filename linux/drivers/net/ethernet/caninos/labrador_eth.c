@@ -901,7 +901,7 @@ labrador_mdio_read(struct mii_bus *bus, int phy_addr, int phy_reg)
     
     lps = readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
 
-    INFO_MSG("mdio_read -> (%#010x)",lps);
+    // INFO_MSG("mdio_read -> (%#010x)",lps);
 
     return lps;
 }
