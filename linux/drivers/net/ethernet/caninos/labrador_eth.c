@@ -499,8 +499,8 @@ __labrador_txrx_desc_setup(struct netdata_local *pldat)
     /* Map the RX descriptors to the RX buffers in hardware */
     for (i = 0; i < ENET_RX_DESC; i++) {
         ptxrxdesc = &pldat->rx_desc_v[i];
-        ptxrxdesc->status = 0;
-        ptxrxdesc->control = RX_DESC_STAT_OWN;
+        ptxrxdesc->status = RX_DESC_STAT_OWN;
+        ptxrxdesc->control = RX_DESC_CTRL_RBS1(ENET_MAXF_SIZE);
         ptxrxdesc->buf_addr1 = __va_to_pa(
                 pldat->rx_buff_v + i * ENET_MAXF_SIZE, pldat);
         ptxrxdesc->buf_addr2 = 0;
@@ -614,6 +614,8 @@ __labrador_eth_interrupt(int irq, void *dev_id)
     tmp = readl(LAB_ENET_STATUS(pldat->net_base));
     /* Clear interrupts */
     writel(tmp, LAB_ENET_STATUS(pldat->net_base));
+
+    INFO_MSG("tmp %#010x\n", tmp);
     
     labrador_eth_disable_int(pldat->net_base);
     if (tmp & (LAB_STATUS_RI | LAB_STATUS_RU)) pldat -> rx_available = 1;
@@ -897,7 +899,7 @@ labrador_mdio_read(struct mii_bus *bus, int phy_addr, int phy_reg)
     
     lps = readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
 
-    INFO_MSG("mdio_read -> (%#010x)",lps);
+    // INFO_MSG("mdio_read -> (%#010x)",lps);
 
     return lps;
 }
@@ -1064,6 +1066,8 @@ static int __labrador_handle_recv(struct net_device *ndev, int budget)
         rxstat = pldat->rx_desc_v[pldat->rxidx].status;
         len = RX_DESC_STAT_FL(rxstat);
 
+        INFO_MSG("rxstat %#010x\n", rxstat);
+
         /* nothing to be read here */
         if (rxstat & RX_DESC_STAT_OWN) break;
 
@@ -1102,10 +1106,13 @@ static int __labrador_handle_recv(struct net_device *ndev, int budget)
         }
 
         /* return descriptor ownership to AHB */
-        rxstat = rxstat | RX_DESC_STAT_OWN;
+        pldat->rx_desc_v[pldat->rxidx].status = RX_DESC_STAT_OWN;
         /* Increment consume index */
         pldat->rxidx++;
-        if (pldat->rxidx >= ENET_RX_DESC) pldat->rxidx = 0;
+        if (pldat->rxidx >= ENET_RX_DESC) {
+            pldat->rx_desc_v[pldat->rxidx].control |= TX_DESC_CTRL_TER;
+            pldat->rxidx = 0;
+        }
         rx_done++;
     }
 
@@ -1118,7 +1125,7 @@ static int labrador_eth_poll(struct napi_struct *napi, int budget)
     struct net_device *ndev = pldat->ndev;
     int rx_done = 0;
     struct netdev_queue *txq = netdev_get_tx_queue(ndev, 0);
-    INFO_MSG("labrador_eth_poll");
+    // INFO_MSG("labrador_eth_poll");
 
     __netif_tx_lock(txq, smp_processor_id());
     __labrador_handle_xmit(ndev);
