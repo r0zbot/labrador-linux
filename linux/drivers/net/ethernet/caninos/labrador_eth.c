@@ -890,12 +890,21 @@ labrador_mdio_read(struct mii_bus *bus, int phy_addr, int phy_reg)
     writel(LAB_MII_SERIAL_START | LAB_MII_SERIAL_OPCODE_READ | phy_addr << 21 | 
            phy_reg << 16, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
 
-    /* Wait for unbusy status */
+    /* devo colocar isso embaixo do check de busy? */
+    lps = readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
+    writel(lps | (phy_addr << 21) | (phyreg << 16), LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
+
+    lps = readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
+    writel(lps | LAB_MII_SERIAL_START | LAB_MII_SERIAL_OPCODE_READ, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
+
+    udelay(100);
+    
     while (readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base)) & LAB_MII_SERIAL_BUSY) {
         if (time_after(jiffies, timeout))
             return -EIO;
         cpu_relax();
     }
+    udelay(100);
     
     lps = readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
 
