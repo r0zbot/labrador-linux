@@ -100,18 +100,18 @@
 /*
  * Status register definitions
  */
-#define LAB_STATUS_TI_CLEAR             (1 << 0)
-#define LAB_STATUS_TPS_CLEAR            (1 << 1)
-#define LAB_STATUS_TU_CLEAR             (1 << 2)
-#define LAB_STATUS_UNF_CLEAR            (1 << 5)
-#define LAB_STATUS_RI_CLEAR             (1 << 6)
-#define LAB_STATUS_RU_CLEAR             (1 << 7)
-#define LAB_STATUS_RPS_CLEAR            (1 << 8)
-#define LAB_STATUS_ETI_CLEAR            (1 << 10)
-#define LAB_STATUS_GTE_CLEAR            (1 << 11)
-#define LAB_STATUS_ERI_CLEAR            (1 << 14)
-#define LAB_STATUS_AIS_CLEAR            (1 << 15)
-#define LAB_STATUS_NIS_CLEAR            (1 << 16)
+#define LAB_STATUS_TI                   (1 << 0)
+#define LAB_STATUS_TPS                  (1 << 1)
+#define LAB_STATUS_TU                   (1 << 2)
+#define LAB_STATUS_UNF                  (1 << 5)
+#define LAB_STATUS_RI                   (1 << 6)
+#define LAB_STATUS_RU                   (1 << 7)
+#define LAB_STATUS_RPS                  (1 << 8)
+#define LAB_STATUS_ETI                  (1 << 10)
+#define LAB_STATUS_GTE                  (1 << 11)
+#define LAB_STATUS_ERI                  (1 << 14)
+#define LAB_STATUS_AIS                  (1 << 15)
+#define LAB_STATUS_NIS                  (1 << 16)
 
 /*
  * Operation Mode register definitions
@@ -259,6 +259,7 @@ struct netdata_local {
     unsigned int            txidx;
     unsigned int            num_used_tx_buffs;
     unsigned int            rxidx;
+    u8                      rx_available;
     struct mii_bus          *mii_bus;
     struct clk              *clk;
     struct clk              *rmii_clk;
@@ -499,7 +500,7 @@ __labrador_txrx_desc_setup(struct netdata_local *pldat)
     for (i = 0; i < ENET_RX_DESC; i++) {
         ptxrxdesc = &pldat->rx_desc_v[i];
         ptxrxdesc->status = 0;
-        ptxrxdesc->control = 0;
+        ptxrxdesc->control = RX_DESC_STAT_OWN;
         ptxrxdesc->buf_addr1 = __va_to_pa(
                 pldat->rx_buff_v + i * ENET_MAXF_SIZE, pldat);
         ptxrxdesc->buf_addr2 = 0;
@@ -543,6 +544,8 @@ labrador_eth_init(struct netdata_local *pldat)
     pldat->last_tx_idx = 0;
     pldat->txidx = 0;
     pldat->rxidx = 0;
+
+    pldat->rx_available=0;
 
     /* interrupt mitigation control register
      * NRP =7, RT =1, CS=0
@@ -613,6 +616,7 @@ __labrador_eth_interrupt(int irq, void *dev_id)
     writel(tmp, LAB_ENET_STATUS(pldat->net_base));
     
     labrador_eth_disable_int(pldat->net_base);
+    if (tmp & (LAB_STATUS_RI | LAB_STATUS_RU)) pldat -> rx_available = 1;
     if (likely(napi_schedule_prep(&pldat->napi)))
         __napi_schedule(&pldat->napi);
 
@@ -1060,6 +1064,9 @@ static int __labrador_handle_recv(struct net_device *ndev, int budget)
         rxstat = pldat->rx_desc_v[pldat->rxidx].status;
         len = RX_DESC_STAT_FL(rxstat);
 
+        /* nothing to be read here */
+        if (rxstat & RX_DESC_STAT_OWN) break;
+
         if (rxstat & RX_DESC_STAT_ES) {
             if (rxstat & RX_DESC_STAT_DE) {
                 /* Overrun error */
@@ -1094,10 +1101,11 @@ static int __labrador_handle_recv(struct net_device *ndev, int budget)
             }
         }
 
+        /* return descriptor ownership to AHB */
+        rxstat = rxstat | RX_DESC_STAT_OWN;
         /* Increment consume index */
         pldat->rxidx++;
-        if (pldat->rxidx >= ENET_RX_DESC)
-            pldat->rxidx = 0;
+        if (pldat->rxidx >= ENET_RX_DESC) pldat->rxidx = 0;
         rx_done++;
     }
 
@@ -1115,9 +1123,10 @@ static int labrador_eth_poll(struct napi_struct *napi, int budget)
     __netif_tx_lock(txq, smp_processor_id());
     __labrador_handle_xmit(ndev);
     __netif_tx_unlock(txq);
-    rx_done = __labrador_handle_recv(ndev, budget);
-
+    if (pldat -> rx_available) rx_done = __labrador_handle_recv(ndev, budget);
     if (rx_done < budget) {
+        /* mandar AHB procurar novos frames se RU foi setado? */
+        pldat -> rx_available = 0;
         napi_complete_done(napi, rx_done);
         labrador_eth_enable_int(pldat->net_base);
     }
