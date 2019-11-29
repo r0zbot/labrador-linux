@@ -346,9 +346,8 @@ reset(struct platform_device *pdev)
     gpio_direction_output(global_phy_gpio.phy_reset_gpio, 0);
     gpio_direction_output(global_phy_gpio.phy_power_gpio, 0);
     gpio_set_value(global_phy_gpio.phy_power_gpio, 0);
- 
     gpio_set_value(global_phy_gpio.phy_reset_gpio, 0);
-    
+    //
     if (gpio_is_valid(global_phy_gpio.phy_power_gpio))
     { 
         gpio_set_value(global_phy_gpio.phy_power_gpio, 1);
@@ -678,6 +677,9 @@ labrador_eth_hard_start_xmit(struct sk_buff *skb, struct net_device *ndev)
     ptxrxdesc->control |= TX_DESC_CTRL_FS | TX_DESC_CTRL_LS | TX_DESC_CTRL_IC;
     mb();
     ptxrxdesc->status = TX_DESC_STAT_OWN;
+    mb();
+
+    INFO_MSG("txidx = %d\n", pldat->txidx);
 
     /* Copy data to the DMA buffer */
     memcpy(pldat->tx_buff_v + pldat->txidx * ENET_MAXF_SIZE, skb->data, skb->len);
@@ -691,6 +693,9 @@ labrador_eth_hard_start_xmit(struct sk_buff *skb, struct net_device *ndev)
         pldat->txidx = 0;
         ptxrxdesc->control |= TX_DESC_CTRL_TER;
     }
+
+    INFO_MSG("ptxrxdesc->status %#010x\n", ptxrxdesc->status);
+    INFO_MSG("ptxrxdesc->control %#010x\n", ptxrxdesc->control);
 
     /* Start transmit */
     writel(LAB_TRANSMIT_ENABLE, LAB_ENET_TRANSMIT(pldat->net_base));
@@ -832,6 +837,10 @@ __labrador_handle_xmit(struct net_device *ndev)
         /* Get buffer status */
         txstat = pldat->tx_desc_v[pldat->last_tx_idx].status;
 
+        INFO_MSG("last_tx_idx = %d\n", pldat->last_tx_idx);
+        INFO_MSG("txstat %#010x\n", txstat);
+        INFO_MSG("txcontrol %#010x\n", pldat->tx_desc_v[pldat->last_tx_idx].control);
+
         /* Next buffer and decrement used buffer counter */
         pldat->num_used_tx_buffs--;
         pldat->last_tx_idx++;
@@ -883,25 +892,24 @@ labrador_mdio_read(struct mii_bus *bus, int phy_addr, int phy_reg)
     unsigned long timeout = jiffies + msecs_to_jiffies(100);
     int lps;
 
-    // INFO_MSG("bus_name: %s",bus->name);
-    // INFO_MSG("phy_addr %#010x\n", phy_addr);
-    // INFO_MSG("phy_reg %#010x\n", phy_reg);
+    INFO_MSG("labrador_mdio_read");
+    INFO_MSG("bus_name: %s",bus->name);
+    INFO_MSG("phy_addr %#010x\n", phy_addr);
+    INFO_MSG("phy_reg %#010x\n", phy_reg);
 
     writel(LAB_MII_SERIAL_START | LAB_MII_SERIAL_OPCODE_READ | phy_addr << 21 | 
            phy_reg << 16, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
 
-    udelay(100);
     /* Wait for unbusy status */
     while (readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base)) & LAB_MII_SERIAL_BUSY) {
         if (time_after(jiffies, timeout))
             return -EIO;
         cpu_relax();
     }
-    udelay(100);
     
     lps = readl(LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
 
-    // INFO_MSG("mdio_read -> (%#010x)",lps);
+    INFO_MSG("mdio_read -> (%#010x)",lps);
 
     return lps;
 }
@@ -912,7 +920,12 @@ labrador_mdio_write(struct mii_bus *bus, int phy_addr, int phy_reg,
 {
     struct netdata_local *pldat = bus->priv;
     unsigned long timeout = jiffies + msecs_to_jiffies(100);
+
     INFO_MSG("labrador_mdio_write");
+    INFO_MSG("bus_name: %s",bus->name);
+    INFO_MSG("phy_addr %#010x\n", phy_addr);
+    INFO_MSG("phy_reg %#010x\n", phy_reg);
+    INFO_MSG("mdio_write -> (%#010x)", phy_data);
 
     writel(LAB_MII_SERIAL_START | LAB_MII_SERIAL_OPCODE_WRITE | phy_addr << 21 | 
            phy_reg << 16 | phy_data, LAB_ENET_MII_SERIAL_MNGT(pldat->net_base));
@@ -1252,7 +1265,7 @@ labrador_eth_drv_probe(struct platform_device *pdev)
 
     /* Get clock for the device */
     pldat->clk = clk_get(&pdev->dev, CLKNAME_CMUMOD_ETHERNET);
-    if (IS_ERR    (pldat->clk)) {
+    if (IS_ERR(pldat->clk)) {
         dev_err(&pdev->dev, "error getting clock.\n");
         ret = PTR_ERR(pldat->clk);
         goto err_out_free_dev;
